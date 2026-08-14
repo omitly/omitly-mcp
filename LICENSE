@@ -1,0 +1,34 @@
+Omitly MCP server — Proprietary License
+Copyright (c) 2026 Innisfallen Pty Ltd. All rights reserved.
+
+This software is provided to let AI agents and MCP clients use Omitly's
+local, on-device PDF tools: free functionality (detection, leak checking,
+verification, document generation) at no charge, and paid functionality
+(verifiable redaction and any other features gated by an Omitly licence)
+subject to a valid, current Omitly licence.
+
+Permission is granted to install and use this package to:
+  (a) use the free functionality for any lawful purpose; and
+  (b) use the paid functionality only while you hold a valid Omitly licence
+      issued by Innisfallen and in accordance with the Omitly Terms of
+      Service at https://omitly.app.
+
+You may NOT, except to the extent permitted by applicable law that cannot be
+excluded by agreement:
+  - copy, modify, or create derivative works of this software;
+  - reverse engineer, decompile, or disassemble it, or attempt to derive the
+    source of the closed components or engine;
+  - redistribute, sublicense, sell, rent, or lease it;
+  - circumvent, disable, or interfere with the licence gating or any
+    usage metering; or
+  - remove or alter any proprietary notices.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+For commercial licensing terms, contact hello@omitly.app.

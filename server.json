@@ -1,0 +1,20 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.omitly/omitly-mcp",
+  "description": "Omitly's local, verifiable PDF redaction for AI agents \u2014 your documents never leave your device.",
+  "repository": {
+    "url": "https://github.com/omitly/omitly-mcp",
+    "source": "github"
+  },
+  "version": "0.1.10",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "omitly-mcp",
+      "version": "0.1.10",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

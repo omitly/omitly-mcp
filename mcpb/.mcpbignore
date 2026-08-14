@@ -1,0 +1,4 @@
+scripts
+*.md
+.gitignore
+package-lock.json
