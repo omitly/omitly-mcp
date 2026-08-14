@@ -1,0 +1,12 @@
+{
+  "name": "leakcheck-wasm",
+  "description": "In-browser PDF redaction leak checker — wasm-bindgen wrapper over redaction-core's detector. Runs 100% client-side; no upload.",
+  "version": "0.1.0",
+  "files": [
+    "leakcheck_wasm_bg.wasm",
+    "leakcheck_wasm.js",
+    "leakcheck_wasm.d.ts"
+  ],
+  "main": "leakcheck_wasm.js",
+  "types": "leakcheck_wasm.d.ts"
+}

@@ -1,0 +1,58 @@
+{
+  "name": "omitly-mcp",
+  "version": "0.1.10",
+  "type": "module",
+  "description": "Model Context Protocol server exposing Omitly's local, verifiable PDF redaction to AI agents. Redaction runs on-device \u2014 documents are never uploaded.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "pdf",
+    "redaction",
+    "claude",
+    "ai",
+    "agent",
+    "local",
+    "privacy"
+  ],
+  "license": "SEE LICENSE IN LICENSE",
+  "homepage": "https://omitly.app/pdf-redaction-mcp",
+  "mcpName": "io.github.omitly/omitly-mcp",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/omitly/omitly-mcp"
+  },
+  "bin": {
+    "omitly-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.test.*",
+    "wasm",
+    "skill",
+    "README.md",
+    "LICENSE",
+    "THIRD-PARTY-NOTICES.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc --watch",
+    "test": "tsc && node --test \"dist/**/*.test.js\"",
+    "prepublishOnly": "npm run build",
+    "mcpb:prep": "node mcpb/scripts/copy-wasm.mjs && cp LICENSE mcpb/LICENSE && npm --prefix mcpb ci",
+    "mcpb:validate": "npx -y @anthropic-ai/mcpb@2.1.2 validate mcpb/manifest.json",
+    "mcpb:pack": "npm run mcpb:prep && npm run mcpb:validate && mkdir -p dist-mcpb && npx -y @anthropic-ai/mcpb@2.1.2 pack mcpb dist-mcpb/omitly-leak-check.mcpb"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "generate-license-file": "4.2.1",
+    "typescript": "^5.5.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

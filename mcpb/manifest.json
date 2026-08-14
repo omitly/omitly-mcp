@@ -1,0 +1,77 @@
+{
+  "manifest_version": "0.3",
+  "name": "omitly-leak-check",
+  "display_name": "Omitly \u2014 Redaction Leak Check (free)",
+  "version": "0.1.10",
+  "description": "Local, offline check for exposed or recoverable sensitive content in PDFs, plus verification of a redacted PDF. Diagnosis only \u2014 nothing is uploaded, nothing is redacted. Actual removal is the licensed Omitly desktop app.",
+  "long_description": "Omitly Redaction Leak Check runs entirely on your machine: it re-extracts the text layer of a PDF (including text hidden under black-box redaction marks, superseded incremental-update revisions, metadata, and form fields) and reports anything that looks like PII \u2014 emails, SSNs, phone numbers, card numbers, and Australian identifiers (TFN/ABN/ACN/Medicare/CRN/IHI/BSB). This is a diagnosis-only tool: it never redacts a file and never issues a certificate. To actually remove sensitive data with a verifiable, offline-checkable proof of removal, use the licensed Omitly desktop app (https://omitly.app).",
+  "author": {
+    "name": "Innisfallen Pty Ltd",
+    "url": "https://omitly.app"
+  },
+  "homepage": "https://omitly.app/defensible-redaction",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/omitly/omitly-mcp"
+  },
+  "support": "https://omitly.app/support",
+  "user_config": {
+    "allowed_dir": {
+      "type": "directory",
+      "title": "Folder Omitly can scan",
+      "description": "The four diagnosis tools (check_redaction, find_sensitive_regions, locate_text, verify_redaction) can only read PDFs under this folder \u2014 nothing else on your machine is accessible to them. Pick the folder containing the documents you want checked.",
+      "required": true
+    }
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/server/index.js"
+      ],
+      "env": {
+        "OMITLY_ALLOWED_DIR": "${user_config.allowed_dir}"
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "check_redaction",
+      "description": "Audit an already-redacted PDF on-device and report whether sensitive text still survives underneath the redaction marks, in superseded revisions, metadata, or form fields. Diagnosis only \u2014 never redacts, never issues a certificate. Free tier: EVALUATION-marked reports, monthly cap on free checks (counted locally; past the cap the tool returns a structured 'free-cap' refusal)."
+    },
+    {
+      "name": "find_sensitive_regions",
+      "description": "Scan a local PDF on-device for candidate PII regions (email/SSN/phone/card plus Australian TFN/ABN/ACN/Medicare/CRN/IHI/BSB) with page and coordinates. Diagnosis only \u2014 does not redact. Free tier: EVALUATION-marked results, monthly cap on free checks (counted locally)."
+    },
+    {
+      "name": "locate_text",
+      "description": "Locate literal strings (names, addresses, account references) in a local PDF on-device and return their page and coordinates. Diagnosis only \u2014 does not redact."
+    },
+    {
+      "name": "verify_redaction",
+      "description": "Re-scan an already-redacted PDF on-device and report whether anything recoverable remains. Works offline; makes no vendor-trust claim beyond what it re-scans."
+    }
+  ],
+  "keywords": [
+    "pdf",
+    "redaction",
+    "privacy",
+    "pii",
+    "leak-check",
+    "local",
+    "offline"
+  ],
+  "license": "SEE LICENSE IN LICENSE",
+  "compatibility": {
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  }
+}
