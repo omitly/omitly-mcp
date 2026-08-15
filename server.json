@@ -6,12 +6,12 @@
     "url": "https://github.com/omitly/omitly-mcp",
     "source": "github"
   },
-  "version": "0.1.10",
+  "version": "0.1.11",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "omitly-mcp",
-      "version": "0.1.10",
+      "version": "0.1.11",
       "transport": {
         "type": "stdio"
       }

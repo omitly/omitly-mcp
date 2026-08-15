@@ -431,6 +431,27 @@ const licenseProvenanceOutputSchema = z
  *  verdicts collapse to `seal_invalid`/`sealValid:false`), and this is the
  *  same allowlist discipline as `toOutputRegion`/`toOutputAudit`: fingerprints,
  *  hashes, filenames and structural verdicts only — never document text. */
+/** omitly#87. `.strict()` is load-bearing, not stylistic: it is what makes an
+ *  accidentally-added field (a fingerprint, a raw licence blob) a hard schema
+ *  failure instead of a silent extra key in a model transcript. */
+export const checkLicenseOutputSchema = z
+  .object({
+    state: z.enum(["licensed", "trial", "trial_expired", "invalid"]),
+    tier: z.enum(["pro", "personal", "standard"]).nullable(),
+    daysLeft: z.number().int().nullable(),
+    /** The vendor-SIGNED display name — the one identity field the root attests. */
+    licensedTo: z.string().nullable(),
+    expiresAt: z.string().nullable(),
+    /** Which of LICENSE-RESOLUTION.md §1's three steps produced the licence. */
+    resolutionStep: z.string().nullable(),
+    /** Bound to one machine? A BOOLEAN — the fingerprint hash is never reported. */
+    deviceBound: z.boolean(),
+    provenanceAvailable: z.boolean(),
+    renewalNotice: z.string().nullable(),
+    reason: z.string().nullable(),
+  })
+  .strict();
+
 export const verifySealOutputSchema = z
   .object({
     verdict: z.enum(SEAL_VERDICTS),
@@ -642,7 +663,7 @@ function findViaEngineOrWasm(confinedPath: string, regions: string[] | undefined
 }
 
 /**
- * Registers all 8 tools on a given `McpServer` instance. Extracted from
+ * Registers all 9 tools on a given `McpServer` instance. Extracted from
  * module-level top code (#540) so tests can build an in-memory server +
  * client pair and drive the tools directly, without a child-process stdio
  * client. `index.ts`'s own module body stays a thin bin entry — see the
@@ -1046,6 +1067,86 @@ server.registerTool(
 );
 
 server.registerTool(
+  "check_license",
+  {
+    description:
+      "Report Omitly's current licence or trial state on this machine — free, " +
+      "takes no arguments, and reads no document. Use it to answer 'am I " +
+      "licensed?', to see how many trial days are left, or to confirm a licence " +
+      "the user just saved has been picked up. Re-resolved on EVERY call, so " +
+      "buy → save the licence file → call again works without restarting this " +
+      "server. Reports which resolution step supplied the licence " +
+      "(OMITLY_LICENSE_FILE, the activated desktop licence, or the import " +
+      "inbox ~/.omitly/omitly.license), the tier, the vendor-signed licensee " +
+      "name, whether the licence is bound to this one machine, and whether " +
+      "this build can make licensed-provenance claims at all. It deliberately " +
+      "NEVER returns the device fingerprint (a stable machine identifier) or " +
+      "the licence file's contents — 'device-bound' is reported as a yes/no. " +
+      "Requires a configured native engine (OMITLY_ENGINE_DIR/OMITLY_REDACT_BIN): " +
+      "the wasm free tier has no licence concept, so there is nothing to report " +
+      "without one.",
+    inputSchema: {},
+    outputSchema: checkLicenseOutputSchema,
+  },
+  async () => {
+    try {
+      const raw = await runEngine({ command: "check_license" });
+      if (!raw?.ok) {
+        return {
+          content: [{ type: "text", text: `Could not read licence state: ${raw?.error ?? "unknown error"}` }],
+          isError: true,
+        };
+      }
+      const res = checked(checkLicenseOutputSchema, {
+        state: raw.state,
+        tier: raw.tier ?? null,
+        daysLeft: raw.daysLeft ?? null,
+        licensedTo: raw.licensedTo ?? null,
+        expiresAt: raw.expiresAt ?? null,
+        resolutionStep: raw.resolutionStep ?? null,
+        deviceBound: raw.deviceBound === true,
+        provenanceAvailable: raw.provenanceAvailable === true,
+        renewalNotice: raw.renewalNotice ?? null,
+        reason: raw.reason ?? null,
+      });
+
+      const summary =
+        res.state === "licensed"
+          ? `✅ Licensed — Omitly ${res.tier ?? "unknown tier"}` +
+            (res.licensedTo ? `, licensed to ${res.licensedTo}` : "") +
+            `${res.expiresAt ? `, until ${res.expiresAt.slice(0, 10)}` : ", perpetual"}` +
+            `${res.deviceBound ? " (bound to this machine)" : ""}.` +
+            `${res.resolutionStep ? ` Source: ${res.resolutionStep}.` : ""}`
+          : res.state === "trial"
+            ? `⏳ Free trial — ${res.daysLeft} day${res.daysLeft === 1 ? "" : "s"} left. ` +
+              "Everything works; audit output is marked as evaluation until a licence is activated."
+            : res.state === "trial_expired"
+              ? "⛔ The 14-day trial has ended. Redaction needs a licence; verification stays free."
+              : `⚠️ A licence file was found but did not verify: ${res.reason ?? "no reason given"}`;
+
+      // §1's renewal rule: surfaced, never silently adopted (omitly#86 owns adoption).
+      const renewal = res.renewalNotice ? `\n\nℹ️ ${res.renewalNotice}` : "";
+      // Invariant #12: a release build on the public dev key must say so rather
+      // than let a "licensed" line read as a trustworthy provenance claim.
+      const untrusted = res.provenanceAvailable
+        ? ""
+        : "\n\n⚠️ This build cannot make licensed-provenance claims (it carries the public " +
+          "development key). Treat any licensed status here as informational only.";
+
+      return {
+        content: [{ type: "text", text: `${summary}${renewal}${untrusted}\n\n${JSON.stringify(res, null, 2)}` }],
+        structuredContent: res,
+      };
+    } catch (e) {
+      return {
+        content: [{ type: "text", text: `Could not read licence state: ${(e as Error).message}` }],
+        isError: true,
+      };
+    }
+  },
+);
+
+server.registerTool(
   "verify_seal",
   {
     description:
@@ -1324,7 +1425,7 @@ server.registerTool(
 );
 } // end registerTools
 
-/** Create a fresh `McpServer` with all 8 tools registered — used by both the
+/** Create a fresh `McpServer` with all 9 tools registered — used by both the
  *  bin entry below and tests. */
 export function createServer(): McpServer {
   const server = new McpServer({ name: "omitly-mcp", version: VERSION });

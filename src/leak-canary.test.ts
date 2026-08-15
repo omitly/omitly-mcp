@@ -1,5 +1,5 @@
 /**
- * Leak-canary test (#540): drives all 8 tools against a document containing
+ * Leak-canary test (#540): drives all 9 tools against a document containing
  * distinctive canary values through an in-memory MCP client, and asserts for
  * each response that (a) it validates against the tool's declared
  * `outputSchema`, and (b) the FULL response — `content[].text` AND
