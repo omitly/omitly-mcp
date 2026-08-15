@@ -25,7 +25,7 @@ anywhere**. Redaction runs on-device through the Omitly engine and returns a
 signed audit log proving the data was removed — the opposite of pasting a
 confidential file into a chat model.
 
-**Four of the eight tools (`find_sensitive_regions`, `locate_text`,
+**Four of the nine tools (`find_sensitive_regions`, `locate_text`,
 `check_redaction`, `verify_redaction`) work out of the box — `npm install`,
 no Rust toolchain, no native binary, no desktop app.** They run on a
 wasm-bindgen build of the same detector that powers the web leak-checker at
@@ -46,6 +46,7 @@ requires the native engine.
 | `verify_redaction` | Re-scans an already-redacted PDF and returns the verification verdict — the redaction-completeness check. |
 | `verify_seal` | Cryptographically checks a PDF's embedded Omitly audit report and trailing Ed25519 tamper-evidence seal — the tamper-evidence check, distinct from `verify_redaction`. **Integrity, not identity:** the signing key is per-install and rides inside the file, so a valid seal means "unchanged since sealed by the holder of this key", never "produced by Omitly" — compare `sealFingerprint` out-of-band for origin. Requires a native engine; no wasm fallback exists. |
 | `create_pdf` | Generates a clean PDF from Markdown/HTML on-device, rendered through a real browser engine so it looks printed — instead of writing a throwaway reportlab/LaTeX script. |
+| `check_license` | Reports the current licence or trial state — tier, trial days left, the vendor-signed licensee name, which resolution step supplied the licence, and whether it is bound to this machine. Free, takes no arguments, reads no document, and is re-resolved on every call so buy → save licence → call again works without a restart. **Never returns the device fingerprint or the licence file's contents** — device binding is a yes/no. Requires a native engine: the wasm free tier has no licence concept. |
 
 ## PDF generation (`create_pdf`)
 
@@ -75,7 +76,7 @@ See [DEMO.md](./DEMO.md) for a full Claude Code walkthrough.
 
 ## Status
 
-The MCP surface (eight tools, schemas, transport), the native engine binary
+The MCP surface (nine tools, schemas, transport), the native engine binary
 (`crates/omitly-cli`, built as `omitly-redact`), and the bundled wasm engine
 (`crates/leakcheck-wasm`, covering the four free tools without a native
 binary) are all implemented and pass end-to-end tests. `find_sensitive_regions`
