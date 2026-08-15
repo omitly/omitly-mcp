@@ -1,0 +1,135 @@
+name: Publish to official MCP Registry
+run-name: Publish MCP Registry ${{ inputs.expected_version }} [${{ inputs.correlation_id }}]
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_version:
+        description: Exact npm/server version to publish
+        required: true
+        type: string
+      expected_commit:
+        description: Exact public mirror commit containing the metadata
+        required: true
+        type: string
+      verify_only:
+        description: Skip publishing and only verify an earlier successful publish
+        type: boolean
+        default: false
+      correlation_id:
+        description: Unique caller-generated ID used to identify this run
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-mcp-registry
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: validate + publish registry metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read # checkout the public metadata to validate and publish
+      id-token: write # mcp-publisher exchanges GitHub OIDC for registry auth
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.expected_commit }}
+
+      - name: Validate public metadata and live npm package
+        env:
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          CORRELATION_ID: ${{ inputs.correlation_id }}
+        run: |
+          set -euo pipefail
+
+          [ "$GITHUB_REF" = "refs/heads/main" ] || { echo "::error::registry publishing is permitted only from public main"; exit 1; }
+          [[ "$CORRELATION_ID" =~ ^[0-9a-f-]{36}$ ]] || { echo "::error::correlation_id must be a lowercase UUID"; exit 1; }
+          actual_commit=$(git rev-parse HEAD)
+          [ "$actual_commit" = "$EXPECTED_COMMIT" ] || { echo "::error::checked out $actual_commit, expected $EXPECTED_COMMIT"; exit 1; }
+
+          package_version=$(jq -r '.version' package.json)
+          server_version=$(jq -r '.version' server.json)
+          package_name=$(jq -r '.mcpName' package.json)
+          server_name=$(jq -r '.name' server.json)
+          npm_version=$(jq -r '.packages[] | select(.registryType == "npm" and .identifier == "omitly-mcp") | .version' server.json)
+
+          [ "$package_version" = "$EXPECTED_VERSION" ] || { echo "::error::package.json is $package_version, expected $EXPECTED_VERSION"; exit 1; }
+          [ "$server_version" = "$EXPECTED_VERSION" ] || { echo "::error::server.json is $server_version, expected $EXPECTED_VERSION"; exit 1; }
+          [ "$npm_version" = "$EXPECTED_VERSION" ] || { echo "::error::server.json npm package is $npm_version, expected $EXPECTED_VERSION"; exit 1; }
+          [ "$package_name" = "$server_name" ] || { echo "::error::mcpName/name mismatch: $package_name != $server_name"; exit 1; }
+          [ "$server_name" = "io.github.omitly/omitly-mcp" ] || { echo "::error::unexpected registry identity: $server_name"; exit 1; }
+          [ "$(jq -r '.repository.url' package.json)" = "https://github.com/omitly/omitly-mcp" ] || { echo "::error::package repository is not the public repo"; exit 1; }
+          [ "$(jq -r '.repository.url' server.json)" = "https://github.com/omitly/omitly-mcp" ] || { echo "::error::server repository is not the public repo"; exit 1; }
+
+          # npm can lag briefly after a successful trusted publish. Bound the
+          # wait and fail closed rather than registering an unpublished version.
+          # The canonical publish runs from a private repo, so npm provenance is
+          # unavailable (npm rejects private-repo attestations). The trusted
+          # publisher binding on npm is therefore the artifact-origin control;
+          # this public job can verify existence/version, but not a public
+          # source-commit attestation that npm does not issue.
+          for attempt in $(seq 1 12); do
+            live=$(npm view "omitly-mcp@$EXPECTED_VERSION" version 2>/dev/null || true)
+            if [ "$live" = "$EXPECTED_VERSION" ]; then
+              echo "ok: npm serves omitly-mcp@$live"
+              exit 0
+            fi
+            echo "attempt $attempt/12: npm serves ${live:-nothing}; waiting for $EXPECTED_VERSION"
+            sleep 10
+          done
+          echo "::error::npm did not serve omitly-mcp@$EXPECTED_VERSION within 120 seconds"
+          exit 1
+
+      - name: Install pinned MCP publisher
+        if: ${{ !inputs.verify_only }}
+        env:
+          PUBLISHER_VERSION: "1.7.9"
+          PUBLISHER_SHA256: "ab128162b0616090b47cf245afe0a23f3ef08936fdce19074f5ba0a4469281ac"
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/mcp-publisher.tar.gz"
+          curl -fL --retry 3 --retry-all-errors \
+            "https://github.com/modelcontextprotocol/registry/releases/download/v${PUBLISHER_VERSION}/mcp-publisher_linux_amd64.tar.gz" \
+            -o "$archive"
+          echo "$PUBLISHER_SHA256  $archive" | sha256sum --check --strict
+          tar -xzf "$archive" -C "$RUNNER_TEMP" mcp-publisher
+          mkdir -p "$RUNNER_TEMP/bin"
+          install -m 0755 "$RUNNER_TEMP/mcp-publisher" "$RUNNER_TEMP/bin/mcp-publisher"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Publish with GitHub OIDC
+        if: ${{ !inputs.verify_only }}
+        run: |
+          set -euo pipefail
+          mcp-publisher --version
+          mcp-publisher login github-oidc
+          mcp-publisher publish
+
+      - name: Verify official registry
+        env:
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+        run: |
+          set -euo pipefail
+          url="https://registry.modelcontextprotocol.io/v0.1/servers?search=io.github.omitly%2Fomitly-mcp"
+          for attempt in $(seq 1 12); do
+            body=$(curl -fsSL --max-time 15 --retry 2 --retry-all-errors "$url" || true)
+            found=$(jq -r --arg version "$EXPECTED_VERSION" \
+              '.servers[]? | select(.server.name == "io.github.omitly/omitly-mcp" and .server.version == $version) | .server.version' \
+              <<<"$body" 2>/dev/null || true)
+            if [ "$found" = "$EXPECTED_VERSION" ]; then
+              echo "ok: official MCP Registry serves io.github.omitly/omitly-mcp@$found"
+              exit 0
+            fi
+            echo "attempt $attempt/12: registry has not exposed $EXPECTED_VERSION yet"
+            sleep 10
+          done
+          echo "::error::official MCP Registry did not expose $EXPECTED_VERSION within 120 seconds"
+          exit 1
