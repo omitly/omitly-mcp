@@ -20,10 +20,11 @@ claude mcp add omitly -- \
   node $PWD/omitly-mcp/dist/index.js
 ```
 
-You now have eight tools available to Claude: `find_sensitive_regions`,
-`locate_text`, `check_redaction`, `redact_by_entity`, `redact_pdf`,
-`verify_redaction`, `verify_seal`, and `create_pdf`. The walkthrough below
-covers the redaction flow; the rest — including `verify_seal`, which checks
+You now have eleven tools available to Claude: `find_sensitive_regions`,
+`locate_text`, `check_redaction`, `extract_pdf_text`, `redact_by_entity`,
+`redact_pdf`, `verify_redaction`, `verify_seal`, `verify_document`,
+`create_pdf`, and `check_license`. The walkthrough below covers the redaction
+flow; the rest — including `verify_seal`/`verify_document`, which check
 tamper-evidence rather than redaction completeness — are documented in
 [README.md](./README.md).
 

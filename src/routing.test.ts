@@ -495,3 +495,66 @@ test("[native] create_pdf routes to the native engine (never wasm)", async () =>
     ["create"],
   );
 });
+
+// omitly#1169: extract_pdf_text now has a wasm fallback like its four
+// siblings (verify_seal and verify_document — omitly#113 — are the two free
+// tools that still have none, since signature verification genuinely needs
+// the native crypto path; see the #113 issue thread for the tracked follow-up
+// to compile omitly-seal into the wasm bundle).
+
+test("[wasm] extract_pdf_text (no native engine) uses wasm and returns the real findings", async () => {
+  const root = freshRoot("omitly-routing-wasm-extracttext-");
+  const doc = copyFixturePdf(root);
+  const { createServer } = await importFresh(wasmOnlyEnv(root));
+  await withClient(createServer, async (client) => {
+    const res: any = await client.callTool({
+      name: "extract_pdf_text",
+      arguments: { pdfPath: doc },
+    });
+    assert.equal(res.isError, undefined);
+    assert.equal(res.structuredContent.masked, true);
+    const spans = res.structuredContent.pages.flatMap((p: any) => p.spans);
+    assert.deepEqual(spans.map((s: any) => s.kind).sort(), REAL_KINDS);
+    // masked by default — the raw PII values must not appear in page text.
+    for (const p of res.structuredContent.pages) {
+      assert.ok(!p.text.includes(REAL_EMAIL) && !p.text.includes(REAL_SSN));
+    }
+  });
+});
+
+test("[wasm] extract_pdf_text masked:false returns raw text, and a regions filter is ignored with a note", async () => {
+  const root = freshRoot("omitly-routing-wasm-extracttext-raw-");
+  const doc = copyFixturePdf(root);
+  const { createServer } = await importFresh(wasmOnlyEnv(root));
+  await withClient(createServer, async (client) => {
+    const res: any = await client.callTool({
+      name: "extract_pdf_text",
+      arguments: { pdfPath: doc, masked: false, regions: ["us"] },
+    });
+    assert.equal(res.isError, undefined);
+    assert.equal(res.structuredContent.masked, false);
+    assert.match(res.structuredContent.note ?? "", /needs a native engine/);
+    const allText = res.structuredContent.pages.map((p: any) => p.text).join("\n");
+    assert.ok(allText.includes(REAL_EMAIL) || allText.includes(REAL_SSN));
+  });
+});
+
+test("[native] extract_pdf_text routes to the native engine", async () => {
+  const root = freshRoot("omitly-routing-native-extracttext-");
+  const logPath = path.join(root, "stub.log");
+  const doc = copyFixturePdf(root);
+  const { createServer } = await importFresh(nativeEnv(root, logPath));
+  await withClient(createServer, async (client) => {
+    const res: any = await client.callTool({
+      name: "extract_pdf_text",
+      arguments: { pdfPath: doc },
+    });
+    assert.equal(res.isError, undefined);
+    assert.equal(res.structuredContent.pages[0].text, "NATIVE-STUB-EXTRACTED-TEXT");
+    assert.equal(res.structuredContent.pages[0].spans[0].kind, "native-stub-marker");
+  });
+  assert.deepEqual(
+    readStubLog(logPath).map((e) => e.command),
+    ["extract_text"],
+  );
+});

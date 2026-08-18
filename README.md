@@ -25,15 +25,17 @@ anywhere**. Redaction runs on-device through the Omitly engine and returns a
 signed audit log proving the data was removed — the opposite of pasting a
 confidential file into a chat model.
 
-**Four of the nine tools (`find_sensitive_regions`, `locate_text`,
-`check_redaction`, `verify_redaction`) work out of the box — `npm install`,
-no Rust toolchain, no native binary, no desktop app.** They run on a
-wasm-bindgen build of the same detector that powers the web leak-checker at
-omitly.app, bundled directly in this package. `create_pdf`, the two
-write tools (`redact_pdf`, `redact_by_entity`), and `verify_seal` still need
-a configured native engine — see "Build & run" below. `verify_seal` has no
-wasm fallback at all: there is no wasm seal-verification path, so it always
-requires the native engine.
+**Five of the eleven tools (`find_sensitive_regions`, `locate_text`,
+`check_redaction`, `verify_redaction`, `extract_pdf_text`) work out of the
+box — `npm install`, no Rust toolchain, no native binary, no desktop app.**
+They run on a wasm-bindgen build of the same detector that powers the web
+leak-checker at omitly.app, bundled directly in this package. `create_pdf`,
+the two write tools (`redact_pdf`, `redact_by_entity`), and the two
+seal-verification tools (`verify_seal`, `verify_document`) still need a
+configured native engine — see "Build & run" below. Neither seal tool has a
+wasm fallback yet: there is no wasm seal-verification path (tracked in
+issue #113), so both always require the native engine, even though checking
+a seal needs no licence.
 
 ## Tools
 
@@ -41,10 +43,13 @@ requires the native engine.
 |------|--------------|
 | `find_sensitive_regions` | Scans a PDF on-device and returns PII candidates — email/SSN/phone/card plus Australian identifiers (TFN, ABN, ACN, Medicare, Centrelink CRN, IHI, BSB; check-digit validated where a published algorithm exists) — with page + exact coordinates, so the agent selects by entity and never guesses geometry. Best-effort pattern matching, not a compliance assessment. Optional `regions` (`generic`/`us`/`au`) narrows the listed kinds. |
 | `locate_text` | Resolves literal strings the model supplies (names, addresses — anything regex can't catch) to their page + coordinates. The model does the recognition; the engine does the geometry. |
+| `check_redaction` | Audits an ALREADY-redacted PDF and reports whether sensitive text still survives underneath the redaction marks, in prior incremental-update revisions, metadata, AcroForm fields, or attachments — the "did my black boxes actually remove the data?" check, with a coverage report scoping what was inspected. Free tier (wasm) is EVALUATION-marked and capped to a monthly number of free checks; a configured licensed engine is not capped. |
+| `extract_pdf_text` | Extracts a PDF's full text, page by page, PII-MASKED BY DEFAULT so raw sensitive values never flood the model's context window. Each page's `spans` report the CHAR offset (not byte offset) and kind of every masked value, so an agent can still reason about position without seeing the raw value. `masked: false` is a documented, explicit opt-in to raw text. Free, no licence, works out of the box on the bundled wasm engine — a native engine is preferred when available (also enables the `regions` filter; wasm ignores it and scans every pattern). Never renders pages to images. |
 | `redact_by_entity` | One-shot: find + filter by kind (`email`/`ssn`/`phone`/`card`/`tfn`/`abn`/`acn`/`medicare`/`crn`/`ihi`/`bsb`) and/or `regions` + redact + verify. The "just scrub the obvious PII" shortcut. |
 | `redact_pdf` | Removes the underlying data from given regions of a PDF, verifies nothing survives, writes the redacted file, and returns the audit log. |
 | `verify_redaction` | Re-scans an already-redacted PDF and returns the verification verdict — the redaction-completeness check. |
 | `verify_seal` | Cryptographically checks a PDF's embedded Omitly audit report and trailing Ed25519 tamper-evidence seal — the tamper-evidence check, distinct from `verify_redaction`. **Integrity, not identity:** the signing key is per-install and rides inside the file, so a valid seal means "unchanged since sealed by the holder of this key", never "produced by Omitly" — compare `sealFingerprint` out-of-band for origin. Requires a native engine; no wasm fallback exists. |
+| `verify_document` | Recipient trust-verification (omitly#113): the same seal/report check as `verify_seal` — not a survivor re-scan — aimed at someone who *received* a PDF from someone else and wants to confirm it's authentic and unaltered, without paying or licensing anything. Free, no licence. Currently requires a native engine like `verify_seal` (no wasm seal-verification path yet). |
 | `create_pdf` | Generates a clean PDF from Markdown/HTML on-device, rendered through a real browser engine so it looks printed — instead of writing a throwaway reportlab/LaTeX script. |
 | `check_license` | Reports the current licence or trial state — tier, trial days left, the vendor-signed licensee name, which resolution step supplied the licence, and whether it is bound to this machine. Free, takes no arguments, reads no document, and is re-resolved on every call so buy → save licence → call again works without a restart. **Never returns the device fingerprint or the licence file's contents** — device binding is a yes/no. Requires a native engine: the wasm free tier has no licence concept. |
 
@@ -76,7 +81,7 @@ See [DEMO.md](./DEMO.md) for a full Claude Code walkthrough.
 
 ## Status
 
-The MCP surface (nine tools, schemas, transport), the native engine binary
+The MCP surface (eleven tools, schemas, transport), the native engine binary
 (`crates/omitly-cli`, built as `omitly-redact`), and the bundled wasm engine
 (`crates/leakcheck-wasm`, covering the four free tools without a native
 binary) are all implemented and pass end-to-end tests. `find_sensitive_regions`
@@ -102,6 +107,22 @@ a JSON response from stdout. Any failure returns `{ "ok": false, "error": "..." 
 { "ok": true, "count": 2, "regions": [
   { "page": 0, "x": 250.4, "y": 610.4, "width": 79.2, "height": 14.4, "kind": "ssn", "preview": "•••-••-6789" } ] }
 // `preview` is masked — the raw value never leaves the process; redaction is driven by coordinates.
+```
+
+```jsonc
+// stdin — "masked" omitted ⇒ true (the default); pass "masked": false for the
+// documented raw-text opt-in. "regions" narrows detected kinds (generic
+// kinds like email/card always apply).
+{ "command": "extract_text", "pdfPath": "..." }
+// stdout — "spans" offsets are CHAR (not byte) offsets into "text", valid
+// against either the masked or the raw text of the same page (masking never
+// changes a page's character count). A page that could not be decoded
+// reports "contentDecoded": false with empty text/spans rather than being
+// silently skipped.
+{ "ok": true, "masked": true, "pages": [
+  { "page": 0, "contentDecoded": true,
+    "text": "Sensitive sample line: SSN •••-••-6789",
+    "spans": [ { "kind": "ssn", "start": 24, "end": 35 } ] } ] }
 ```
 
 ```jsonc
@@ -137,10 +158,14 @@ a JSON response from stdout. Any failure returns `{ "ok": false, "error": "..." 
   "sourceFilename": "...", "outputFilename": "..." }
 ```
 
+The MCP tool `verify_document` (omitly#113) shells out to the exact same
+`verify_seal` engine command above — it is the recipient-facing name/wording
+for the same seal/report integrity check, not a separate engine command.
+
 ## Build & run
 
 **Free tools only (find_sensitive_regions, locate_text, check_redaction,
-verify_redaction) — no native engine needed:**
+verify_redaction, extract_pdf_text) — no native engine needed:**
 
 ```bash
 cd omitly-mcp
@@ -160,11 +185,11 @@ toolchain: `npm run build` is plain `tsc`. The wasm is compiled from the
 Omitly detection engine, whose Rust source is not part of this repository
 (see "Repository scope" below).
 
-**Everything, including `create_pdf`, `verify_seal`, and the two write tools
-(`redact_pdf`, `redact_by_entity`):** `verify_seal` has no wasm fallback —
-unlike the four free tools above, it always needs the native engine
-configured, even though it carries no licence requirement (see "Licensing"
-below).
+**Everything, including `create_pdf`, `verify_seal`, `verify_document`, and
+the two write tools (`redact_pdf`, `redact_by_entity`):** neither seal tool
+has a wasm fallback — unlike the five free tools above, they always need the
+native engine configured, even though checking a seal carries no licence
+requirement (see "Licensing" below).
 
 ```bash
 # Build and start the MCP server (no Rust toolchain needed)
@@ -182,8 +207,10 @@ One env var covers both binaries: `OMITLY_ENGINE_DIR` is the directory holding
 `omitly-redact` and `omitly-pdf`. Per-binary overrides (`OMITLY_REDACT_BIN`,
 `OMITLY_PDF_BIN`) win over the directory when set. When `OMITLY_ENGINE_DIR`
 (or `OMITLY_REDACT_BIN`) isn't set, `find_sensitive_regions`, `locate_text`,
-and `check_redaction` transparently use the bundled wasm engine instead —
-same detector, no native binary. `verify_redaction` does too, but with a
+`check_redaction`, and `extract_pdf_text` transparently use the bundled wasm
+engine instead — same detector, no native binary (`extract_pdf_text`'s
+optional `regions` filter is native-only; wasm scans every pattern and notes
+that the filter was ignored). `verify_redaction` does too, but with a
 narrower check: without a native engine there's no `<path>.audit.json`
 sidecar to verify specific regions against, so it falls back to a general
 re-scan of the whole file (still useful — a non-empty result still means the
@@ -219,22 +246,25 @@ same machine) runs unmarked; otherwise the shared 14-day trial applies and
 the audit output is permanently marked as evaluation output. The redaction
 itself is never degraded, and licence checks never touch the network.
 `find_sensitive_regions`, `locate_text`, `check_redaction`, `verify_redaction`,
-and `verify_seal` are free — and `verify_redaction`/`verify_seal` are free
-forever with **no cap and no marking** (recipient-side verification everywhere
-is the point). The two free *detection* tools (`find_sensitive_regions`,
-`check_redaction`) on the wasm tier — i.e. with no native engine configured —
-are metered (omitly#226): results carry an `evaluation: true` flag plus an
-EVALUATION banner, and after a monthly number of free checks (default 10,
-`OMITLY_FREE_CAP` to tune) the tool returns a structured
-`{ blocked: true, reason: "free-cap" }` refusal until the month rolls over.
-The count lives in `~/.omitly/usage.json` (override the directory with
-`OMITLY_STATE_DIR`; written 0600) and is **local-only — nothing ever phones
-home**; deleting the file resets the free count, which is accepted (the
-no-network doctrine makes it unavoidable), and the counter is deliberately
-never consulted by any paid write path. Calls served by a configured native
-engine are not metered here — the licence rules above apply on that path
-instead. `verify_seal` (native-only) stays free by the same design in the
-engine (no Pro/Personal licence check on that command path either).
+`verify_seal`, `verify_document`, and `extract_pdf_text` are free — and
+`verify_redaction`/`verify_seal`/`verify_document`/`extract_pdf_text` are free
+forever with **no cap and no marking** (recipient-side verification and
+on-device extraction are the point, not a metered funnel). The two free
+*detection* tools (`find_sensitive_regions`, `check_redaction`) on the wasm
+tier — i.e. with no native engine configured — are metered (omitly#226):
+results carry an `evaluation: true` flag plus an EVALUATION banner, and after
+a monthly number of free checks (default 10, `OMITLY_FREE_CAP` to tune) the
+tool returns a structured `{ blocked: true, reason: "free-cap" }` refusal
+until the month rolls over. The count lives in `~/.omitly/usage.json`
+(override the directory with `OMITLY_STATE_DIR`; written 0600) and is
+**local-only — nothing ever phones home**; deleting the file resets the free
+count, which is accepted (the no-network doctrine makes it unavoidable), and
+the counter is deliberately never consulted by any paid write path. Calls
+served by a configured native engine are not metered here — that user is in
+the engine funnel, where the licence rules above apply. `verify_seal` and
+`verify_document` (both native-only) stay free by the same design in
+`crates/omitly-cli` (no Pro/Personal licence check on that command path
+either — both tools shell out to the identical `verify_seal` engine command).
 
 ## Register with Claude Code
 

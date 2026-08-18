@@ -15,13 +15,11 @@
  *   verify_redaction      → independently re-confirm the output.
  *
  * Integration point — the engine binary:
- *   This server shells out to a local CLI (`omitly-redact`) that wraps the
- *   Omitly redaction engine. The engine ships with the Omitly desktop
- *   application and its source is not part of this package; point
- *   OMITLY_REDACT_BIN (or OMITLY_ENGINE_DIR) at the binary to enable the
- *   native-engine tools. The contract is documented in README.md and in
- *   `runEngine()` below: a JSON request on stdin, a JSON response (result +
- *   audit log) on stdout.
+ *   This server shells out to a local CLI (`omitly-redact`, in
+ *   crates/omitly-cli) that wraps the `redaction-core` Rust crate. Build it with
+ *   `cargo build -p omitly-cli` and point OMITLY_REDACT_BIN at the binary. The
+ *   contract is documented in README.md and in `runEngine()` below: a JSON
+ *   request on stdin, a JSON response (result + audit log) on stdout.
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -47,10 +45,12 @@ import {
 } from "./usage.js";
 
 /**
- * WASM fallback for the four detection/verify tools — bundled in the npm
- * package (see package.json "files"), so `find_sensitive_regions`,
- * `locate_text`, `check_redaction` and `verify_redaction` work out of the box
- * with NO native engine binary and NO Rust toolchain on the caller's machine.
+ * WASM fallback for five detection/verify/extract tools — bundled in the npm
+ * package (see package.json "files"/"build:wasm"), so `find_sensitive_regions`,
+ * `locate_text`, `check_redaction`, `verify_redaction` and `extract_pdf_text`
+ * (omitly#1169 — the last of the free tools to gain this, see that issue for
+ * why it didn't ship with the others) work out of the box with NO native
+ * engine binary and NO Rust toolchain on the caller's machine.
  * This is the wasm-bindgen twin of `redaction-core`'s detector (same crate
  * already shipped for the web leak-checker at omitly.app) — detection-only,
  * no qpdf/process/filesystem, so it crosses to wasm cleanly.
@@ -63,7 +63,11 @@ import {
  * same way; wasm and native currently agree on output shape for this reason).
  */
 const wasmRequire = createRequire(import.meta.url);
-type WasmEngine = { scan(bytes: Uint8Array): string; locate(bytes: Uint8Array, needlesJson: string): string };
+type WasmEngine = {
+  scan(bytes: Uint8Array): string;
+  locate(bytes: Uint8Array, needlesJson: string): string;
+  extract_text(bytes: Uint8Array, masked: boolean): string;
+};
 let wasmEngine: WasmEngine | undefined;
 try {
   wasmEngine = wasmRequire("../wasm/leakcheck_wasm.js") as WasmEngine;
@@ -115,18 +119,31 @@ function wasmScanToFindShape(raw: string): any {
 
 function runWasmScan(bytes: Buffer): any {
   if (!wasmEngine) {
-    return { ok: false, error: "bundled wasm engine not found in wasm/ — reinstall the package, or run `npm run build` if working from source" };
+    return { ok: false, error: "bundled wasm engine not built — run `npm run build` (needs wasm-pack + Rust)" };
   }
   return wasmScanToFindShape(wasmEngine.scan(new Uint8Array(bytes)));
 }
 
 function runWasmLocate(bytes: Buffer, needles: string[]): any {
   if (!wasmEngine) {
-    return { ok: false, error: "bundled wasm engine not found in wasm/ — reinstall the package, or run `npm run build` if working from source" };
+    return { ok: false, error: "bundled wasm engine not built — run `npm run build` (needs wasm-pack + Rust)" };
   }
   const raw = JSON.parse(wasmEngine.locate(new Uint8Array(bytes), JSON.stringify(needles))) as WasmScanResult;
   if (!raw.ok) return { ok: false, error: raw.error ?? "wasm locate failed" };
   return { ok: true, count: raw.count, regions: raw.leaks };
+}
+
+/** Wasm `extract_text`'s output shape is already identical to the native
+ *  `extract_text` command's (`{ ok, masked, pages }`, camelCase — see
+ *  `crates/leakcheck-wasm/src/lib.rs`'s doc comment on why that binding
+ *  doesn't just derive `Serialize` on the crate's own snake_case types), so
+ *  unlike `runWasmScan`/`runWasmLocate` there is no shape translation here —
+ *  `extract_pdf_text`'s handler below works unchanged regardless of engine. */
+function runWasmExtractText(bytes: Buffer, masked: boolean): any {
+  if (!wasmEngine) {
+    return { ok: false, error: "bundled wasm engine not built — run `npm run build` (needs wasm-pack + Rust)" };
+  }
+  return JSON.parse(wasmEngine.extract_text(new Uint8Array(bytes), masked));
 }
 
 /** Single source of truth for the server version (keeps the MCP handshake in
@@ -499,6 +516,77 @@ function toOutputSeal(res: NormalizedSealResult) {
   };
 }
 
+/** Shared core for `verify_seal` and `verify_document` (omitly#113) — both
+ *  tools check exactly the same thing (the CLI's `verify_seal` engine
+ *  command: the embedded audit report + trailing Ed25519 seal) and only
+ *  differ in their tool name/description and the wording of their summary
+ *  text, so the confine → runEngine → normalize → schema-check pipeline
+ *  lives here once. Currently native-engine-only — there is no wasm
+ *  seal-verification path yet (omitly-seal itself has no filesystem/process
+ *  dependency and could in principle cross to wasm, but that compilation
+ *  work has not been done; see the #113 issue thread's 2026-08-14 note). */
+async function runSealVerification(
+  pdfPath: string,
+): Promise<
+  | { ok: true; res: NormalizedSealResult; structuredContent: ReturnType<typeof toOutputSeal> }
+  | { ok: false; errorText: string }
+> {
+  const confined = confineInput(pdfPath, ROOT);
+  const raw = await runEngine({ command: "verify_seal", pdfPath: confined });
+  if (!raw?.ok) {
+    return { ok: false, errorText: raw?.error ?? "unknown error" };
+  }
+  const res = normalizeSealResult(raw);
+  const structuredContent = checked(verifySealOutputSchema, toOutputSeal(res));
+  return { ok: true, res, structuredContent };
+}
+
+/** One PII span located within a page's extracted text — CHAR (Unicode
+ *  scalar value) offsets, never byte offsets (mirrors `redaction_core::
+ *  detect::TextSpan`; see that type's doc comment for why). Never a raw
+ *  value: just the kind and where it sits, so a caller receiving MASKED
+ *  text still learns what was found and where. */
+const textSpanOutputSchema = z
+  .object({ kind: z.string(), start: z.number().int().min(0), end: z.number().int().min(0) })
+  .strict();
+
+const extractedPageOutputSchema = z
+  .object({
+    page: z.number().int(),
+    /** `false` ⇒ this page's content stream could not be read (size cap or
+     *  parse failure) — `text` is empty because it was never scanned, not
+     *  because the page is blank. */
+    contentDecoded: z.boolean(),
+    /** Masked (default) or raw text, per the `masked` tool argument. */
+    text: z.string(),
+    spans: z.array(textSpanOutputSchema),
+  })
+  .strict();
+
+export const extractPdfTextOutputSchema = z
+  .object({
+    /** Echoes which mode actually ran — `true` unless the caller explicitly
+     *  passed `masked: false`. */
+    masked: z.boolean(),
+    pages: z.array(extractedPageOutputSchema),
+    /** Set when a `regions` filter was requested but ignored — the wasm
+     *  fallback (no native engine configured) always scans every pattern,
+     *  same posture as `findSensitiveRegionsOutputSchema`'s `note`. */
+    note: z.string().optional(),
+  })
+  .strict();
+
+/** Copy only the known-safe fields off an engine-returned extracted page —
+ *  same allowlist defense as `toOutputRegion`/`toOutputAudit`. */
+function toOutputExtractedPage(p: any) {
+  return {
+    page: p.page,
+    contentDecoded: p.contentDecoded,
+    text: p.text,
+    spans: (p.spans ?? []).map((s: any) => ({ kind: s.kind, start: s.start, end: s.end })),
+  };
+}
+
 export const checkRedactionOutputSchema = z
   .object({
     clean: z.boolean(),
@@ -515,12 +603,13 @@ export const checkRedactionOutputSchema = z
   .strict();
 
 /**
- * Free-tier metering gate for the two DETECTION tools only.
- * Applies solely to the wasm-served path (no native engine configured) — the
- * zero-install tier. When a native engine IS configured, the engine's own
- * licence gates apply instead of this counter. Returns the refusal result when
- * capped, undefined when the call may proceed (with the metering outcome
- * recorded on `meter` for the EVALUATION banner).
+ * Free-tier metering gate (omitly#226) for the two DETECTION tools only.
+ * Applies solely to the wasm-served path (no native engine configured): that
+ * is the zero-install tier whose unlimited use is the QA-oracle problem. A
+ * configured native engine means the caller is already in the engine funnel —
+ * the engine's own licence gates apply there, not this counter. Returns the
+ * refusal result when capped, undefined when the call may proceed (with the
+ * metering outcome recorded on `meter` for the EVALUATION banner).
  */
 function freeTierGate(tool: string): { refusal?: ReturnType<typeof capRefusalResult>; meter?: FreeCheckOutcome } {
   if (ENGINE_BIN) return {};
@@ -662,8 +751,26 @@ function findViaEngineOrWasm(confinedPath: string, regions: string[] | undefined
   return res;
 }
 
+/** Run "extract_text" via the native engine if configured, else the bundled
+ *  wasm fallback (omitly#1169) — same posture as `findViaEngineOrWasm`:
+ *  regional narrowing only applies natively, wasm always scans every
+ *  pattern (more results, never fewer) rather than silently dropping the
+ *  requested narrowing. */
+function extractTextViaEngineOrWasm(
+  confinedPath: string,
+  regions: string[] | undefined,
+  masked: boolean,
+): Promise<any> | any {
+  if (ENGINE_BIN) return runEngine({ command: "extract_text", pdfPath: confinedPath, regions, masked });
+  const res = runWasmExtractText(readFileSync(confinedPath), masked);
+  if (res.ok && regions && regions.length) {
+    res.note = "Regional narrowing (regions filter) needs a native engine — showing all detected kinds.";
+  }
+  return res;
+}
+
 /**
- * Registers all 9 tools on a given `McpServer` instance. Extracted from
+ * Registers all 10 tools on a given `McpServer` instance. Extracted from
  * module-level top code (#540) so tests can build an in-memory server +
  * client pair and drive the tools directly, without a child-process stdio
  * client. `index.ts`'s own module body stays a thin bin entry — see the
@@ -968,7 +1075,11 @@ server.registerTool(
       "file wasn't redacted by this tool), it falls back to a general on-device " +
       "re-scan of the whole file and reports whether anything is still " +
       "detectable — a good-faith re-check, not a claim of the same rigor as the " +
-      "sidecar-based path.",
+      "sidecar-based path. This is a self-check for the person who just " +
+      "redacted, typically the one holding the sidecar file — a third-party " +
+      "recipient who only has the delivered PDF should use `verify_document` " +
+      "instead, which checks the embedded audit report and seal rather than " +
+      "re-scanning region bytes.",
     inputSchema: {
       pdfPath: z.string().describe("absolute path to the redacted PDF to verify"),
     },
@@ -1172,16 +1283,14 @@ server.registerTool(
   },
   async ({ pdfPath }) => {
     try {
-      const confined = confineInput(pdfPath, ROOT);
-      const raw = await runEngine({ command: "verify_seal", pdfPath: confined });
-      if (!raw?.ok) {
+      const result = await runSealVerification(pdfPath);
+      if (!result.ok) {
         return {
-          content: [{ type: "text", text: `Could not verify seal: ${raw?.error ?? "unknown error"}` }],
+          content: [{ type: "text", text: `Could not verify seal: ${result.errorText}` }],
           isError: true,
         };
       }
-      const res = normalizeSealResult(raw);
-      const structuredContent = checked(verifySealOutputSchema, toOutputSeal(res));
+      const { res, structuredContent } = result;
       if (res.verdict === "seal_unsupported_version") {
         return {
           content: [
@@ -1224,6 +1333,94 @@ server.registerTool(
     } catch (e) {
       return {
         content: [{ type: "text", text: `Could not verify seal: ${(e as Error).message}` }],
+        isError: true,
+      };
+    }
+  },
+);
+
+server.registerTool(
+  "verify_document",
+  {
+    description:
+      "Recipient trust-verification: for someone who RECEIVED a PDF from " +
+      "someone else and wants to confirm it's an authentic, unaltered Omitly " +
+      "output — free tier, no licence required. Confirms the embedded audit " +
+      "report and Ed25519 tamper-evidence seal are valid and unaltered since " +
+      "sealing, and reports the seal's own attested verdict — this does not " +
+      "independently re-scan the document for residual PII. For that " +
+      "self-check (typically run by the person who just redacted, not a " +
+      "recipient), use `verify_redaction` instead. The seal proves " +
+      "INTEGRITY, NOT IDENTITY: the signing key is per-install and travels " +
+      "with the file, so a valid seal means 'unchanged since sealed by the " +
+      "holder of this key', never 'produced by Omitly' — compare " +
+      "`sealFingerprint` out-of-band against the fingerprint the sender " +
+      "published if origin matters. Currently requires a configured native " +
+      "engine (OMITLY_ENGINE_DIR/OMITLY_REDACT_BIN) — there is no wasm " +
+      "seal-verification path yet (tracked in issue #113), so a recipient " +
+      "running only `npx omitly-mcp` with no engine installed cannot use " +
+      "this tool until that lands. A `seal_unsupported_version` verdict " +
+      "means this verifier is too old to check the seal at all — that is " +
+      "neither a pass nor a fail; update the verifier rather than trusting " +
+      "or rejecting the file on that basis.",
+    inputSchema: {
+      pdfPath: z.string().describe("absolute path to the PDF to check for an Omitly audit report and seal"),
+    },
+    outputSchema: verifySealOutputSchema,
+  },
+  async ({ pdfPath }) => {
+    try {
+      const result = await runSealVerification(pdfPath);
+      if (!result.ok) {
+        return {
+          content: [{ type: "text", text: `Could not verify document: ${result.errorText}` }],
+          isError: true,
+        };
+      }
+      const { res, structuredContent } = result;
+      if (res.verdict === "seal_unsupported_version") {
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                `⚠️ This file carries a seal version (${res.sealVersion ?? "unknown"}) this verifier ` +
+                "does not implement. Nothing was cryptographically checked — this is " +
+                "neither a pass nor a fail. Update the verifier to get a real verdict." +
+                (res.carriesAuditReport
+                  ? " The file DOES carry an Omitly audit report, which raises the stakes: " +
+                    "an altered-and-relabelled Omitly output can look exactly like this " +
+                    "to a verifier that's too old to check the seal — treat this as needing " +
+                    "escalation, not a benign version mismatch."
+                  : " No Omitly audit report was found alongside it.") +
+                `\n\n${JSON.stringify(res, null, 2)}`,
+            },
+          ],
+          structuredContent,
+        };
+      }
+      // Same non-overclaim discipline as verify_seal (CLAUDE.md invariant #2):
+      // integrity only, never an origin/production claim.
+      const summary =
+        res.verdict === "verified"
+          ? `✅ This document's audit report and seal are intact — unchanged since they were sealed. ` +
+            `That is an INTEGRITY check, not proof of origin: the signing key is per-install and ` +
+            `ships with the file, so compare the fingerprint (${res.sealFingerprint ?? "none reported"}) ` +
+            `out-of-band against what the sender published if you need to know who sealed it. This did ` +
+            `NOT re-scan the document for residual PII — use \`verify_redaction\` for that.`
+          : res.verdict === "no_report"
+            ? `⚠️ No Omitly audit report was found in this document — there is nothing here for this ` +
+              `tool to verify. This does not mean the document is unsafe, only that it was not sealed ` +
+              `by (or the report was stripped from) this pipeline.`
+            : `⚠️ Seal verdict: ${res.verdict} — do not treat this file's audit trail as trustworthy.`;
+      return {
+        content: [{ type: "text", text: `${summary}\n\n${JSON.stringify(res, null, 2)}` }],
+        structuredContent,
+        isError: isSealErrorVerdict(res.verdict),
+      };
+    } catch (e) {
+      return {
+        content: [{ type: "text", text: `Could not verify document: ${(e as Error).message}` }],
         isError: true,
       };
     }
@@ -1423,9 +1620,92 @@ server.registerTool(
     }
   },
 );
+server.registerTool(
+  "extract_pdf_text",
+  {
+    description:
+      "Extract a PDF's text, page by page, for reading or summarizing — PII-MASKED " +
+      "BY DEFAULT, so detected emails, SSNs, phone/card numbers and Australian " +
+      "identifiers (TFN/ABN/ACN/Medicare/CRN/IHI/BSB) never flood your context window " +
+      "as raw values. Each page returns its (masked, unless you opt out) text plus " +
+      "'spans': the CHAR offset (not byte offset — matters for any non-ASCII text) of " +
+      "every detected PII value with its kind, so you can still reason about WHERE " +
+      "something was found even though the value itself reads as a masked preview " +
+      "(e.g. '•••-••-6789'). Pass 'masked: false' ONLY when you deliberately need the " +
+      "raw text for genuine content review and understand the raw PII values will then " +
+      "appear verbatim in this response and in your context — that is the explicit, " +
+      "documented opt-in this tool requires; the default is always masked. A page " +
+      "whose content stream could not be read (corrupt or size-capped) reports " +
+      "'contentDecoded: false' with empty text rather than being silently skipped or " +
+      "counted as blank. Does NOT render pages to images — text only. Free tier, no " +
+      "licence required; works zero-install via the bundled wasm engine, same as " +
+      "find_sensitive_regions/locate_text/check_redaction/verify_redaction — a " +
+      "configured native engine (OMITLY_ENGINE_DIR) is preferred when available (also " +
+      "enables the 'regions' filter, wasm-only ignores it and scans every pattern) but " +
+      "not required. The file is never uploaded: extraction runs entirely on-device.",
+    inputSchema: {
+      pdfPath: z.string().describe("absolute path to the PDF to extract text from"),
+      regions: z
+        .array(REGIONS)
+        .optional()
+        .describe(
+          "narrow which PII kinds are detected/masked to these regional packs (generic " +
+            "kinds like email/card always apply regardless); omit to scan everything — " +
+            "the safe default",
+        ),
+      masked: z
+        .boolean()
+        .optional()
+        .describe(
+          "false is an explicit opt-in to RAW (unmasked) text — the raw PII values will " +
+            "then appear verbatim in this response. Omit, or pass true, for the default " +
+            "masked behaviour.",
+        ),
+    },
+    outputSchema: extractPdfTextOutputSchema,
+  },
+  async ({ pdfPath, regions, masked }) => {
+    try {
+      const confined = confineInput(pdfPath, ROOT);
+      const wantMasked = masked ?? true;
+      const res = await extractTextViaEngineOrWasm(confined, regions, wantMasked);
+      if (!res?.ok) {
+        return {
+          content: [{ type: "text", text: `Extraction failed: ${res?.error ?? "unknown error"}` }],
+          isError: true,
+        };
+      }
+      const pages = res.pages ?? [];
+      const totalSpans = pages.reduce(
+        (n: number, p: any) => n + (Array.isArray(p.spans) ? p.spans.length : 0),
+        0,
+      );
+      const summary =
+        `Extracted ${pages.length} page(s).\n` +
+        (wantMasked
+          ? `${totalSpans} PII span(s) masked — pass masked:false for raw text (raw PII ` +
+            `values will then appear in this response).\n\n`
+          : `⚠️ RAW TEXT requested (masked:false) — ${totalSpans} PII span(s) are flagged ` +
+            `in "spans" but "text" itself is UNMASKED.\n\n`) +
+        (res.note ? `Note: ${res.note}\n\n` : "") +
+        JSON.stringify(pages, null, 2);
+      const structuredContent = checked(extractPdfTextOutputSchema, {
+        masked: wantMasked,
+        ...(res.note ? { note: res.note as string } : {}),
+        pages: pages.map(toOutputExtractedPage),
+      });
+      return { content: [{ type: "text", text: summary }], structuredContent };
+    } catch (e) {
+      return {
+        content: [{ type: "text", text: `Could not extract text: ${(e as Error).message}` }],
+        isError: true,
+      };
+    }
+  },
+);
 } // end registerTools
 
-/** Create a fresh `McpServer` with all 9 tools registered — used by both the
+/** Create a fresh `McpServer` with all 10 tools registered — used by both the
  *  bin entry below and tests. */
 export function createServer(): McpServer {
   const server = new McpServer({ name: "omitly-mcp", version: VERSION });
