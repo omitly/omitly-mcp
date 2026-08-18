@@ -1,33 +1,36 @@
 /**
- * Free-tier usage metering for the detection tools.
+ * Free-tier usage metering (omitly#226) — the anti-cannibalization mechanic for
+ * the free detection tools.
  *
- * The free (wasm-served, unlicensed) tier of the two detection tools is capped
- * per calendar month, and every free leak report is EVALUATION-marked.
- * `verify_redaction` and `verify_seal` are NEVER capped or marked — they are
- * category-membership tools, and being ubiquitous on the recipient side is the
- * point. Calls served by a configured native engine are not metered here; that
- * path has its own licence gates.
+ * Why this exists: an UNLIMITED free `check_redaction` is a QA oracle usable on
+ * any tool's output — redact in Acrobat, iterate against the free Omitly check
+ * until clean, never buy the engine. So the free (wasm-served, unlicensed) tier
+ * of the two detection tools is capped per calendar month and every free leak
+ * report is EVALUATION-marked. `verify_redaction`/`verify_seal` are NEVER
+ * capped or marked (category-membership tools; recipient-side ubiquity is the
+ * point), and calls served by a configured native engine are not metered here —
+ * that user is already in the engine funnel, whose own licence gates apply.
  *
- * Constraints, enforced by construction:
+ * Doctrine constraints, enforced by construction:
  *   - NO phone-home. Counting is a local file under OMITLY_STATE_DIR
  *     (default ~/.omitly), written 0600. Nothing here touches the network.
  *   - The counter is honesty infrastructure, not a paywall: deleting
- *     usage.json resets the free count, and that is ACCEPTED — the no-network
- *     doctrine makes it unavoidable. What the counter must never do is gate a
- *     paid write. The paid line is the native engine plus a licence, and this
+ *     usage.json resets the free count and that is ACCEPTED (the no-network
+ *     doctrine makes it unavoidable). What the counter must never do is gate
+ *     a paid write — the paid line is the native engine + licence, and this
  *     module is deliberately never consulted by any write tool.
  *   - Metering I/O must never fail a tool call: every filesystem error
  *     degrades to an in-memory count for this process (monotonic — the
  *     in-memory floor keeps the cap enforced within a session even on a
  *     read-only filesystem).
  *
- * State file shape:
+ * State file shape (issue omitly#226):
  *   { "check_calls": { "YYYY-MM": n }, "install_id": "<uuid>", "licensed": false }
  *
- * `licensed` is a forward hook: the MCP server cannot verify a licence today,
- * so nothing here sets it true automatically — but a true value skips the cap
- * and the EVALUATION mark, so the field's semantics are settled now rather
- * than migrated later.
+ * `licensed` is a forward hook for the licence-UX work (omitly#116/#87): the
+ * MCP server cannot verify a licence today, so nothing in this repo sets it
+ * true automatically — but a true value skips the cap and the EVALUATION mark,
+ * so the field's semantics are settled now rather than migrated later.
  */
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";

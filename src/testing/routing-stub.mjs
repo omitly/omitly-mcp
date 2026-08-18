@@ -96,6 +96,22 @@ function handle(req) {
     case "create":
       writeFileSync(req.outputPath, "NATIVE-STUB-CREATED-PDF");
       return { ok: true, output: req.outputPath };
+    case "extract_text":
+      // omitly#114: distinct marker text (never the wasm/real detector's
+      // output) plus a matching span, so a test can tell native routing from
+      // "no wasm fallback exists so this would otherwise be unreachable".
+      return {
+        ok: true,
+        masked: req.masked !== false,
+        pages: [
+          {
+            page: 0,
+            contentDecoded: true,
+            text: "NATIVE-STUB-EXTRACTED-TEXT",
+            spans: [{ kind: "native-stub-marker", start: 0, end: 11 }],
+          },
+        ],
+      };
     default:
       return { ok: false, error: `routing-stub: unhandled command ${req.command}` };
   }

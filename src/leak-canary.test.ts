@@ -1,6 +1,8 @@
 /**
- * Leak-canary test (#540): drives all 9 tools against a document containing
- * distinctive canary values through an in-memory MCP client, and asserts for
+ * Leak-canary test (#540): drives 10 of the server's 11 tools (all but
+ * `check_license`, which reads no document and takes no arguments) against a
+ * document containing distinctive canary values through an in-memory MCP
+ * client, and asserts for
  * each response that (a) it validates against the tool's declared
  * `outputSchema`, and (b) the FULL response — `content[].text` AND
  * `structuredContent` — never contains a canary substring verbatim.
@@ -77,6 +79,7 @@ const {
   createServer,
   findSensitiveRegionsOutputSchema,
   locateTextOutputSchema,
+  extractPdfTextOutputSchema,
   redactByEntityOutputSchema,
   redactPdfOutputSchema,
   verifyRedactionOutputSchema,
@@ -125,6 +128,49 @@ test("locate_text: validates outputSchema and leaks nothing outside its own inpu
     // Excluded: the caller supplied these as search input. Everything else
     // (phone, sentinel) must still never appear.
     assertNoLeak("locate_text", res, [CANARY_EMAIL, CANARY_SSN]);
+  });
+});
+
+test("extract_pdf_text: default (masked) — PII is masked; ordinary non-PII text is NOT a leak", async () => {
+  await withClient(async (client) => {
+    const res: any = await client.callTool({
+      name: "extract_pdf_text",
+      arguments: { pdfPath: docPath },
+    });
+    assert.equal(res.isError, undefined);
+    assert.equal(extractPdfTextOutputSchema.safeParse(res.structuredContent).success, true);
+    assert.equal(res.structuredContent.masked, true);
+    assert.equal(res.structuredContent.pages.length, 1);
+    // 3 spans found (email, ssn, phone) — the sentinel is not PII.
+    assert.equal(res.structuredContent.pages[0].spans.length, 3);
+    // Unlike find_sensitive_regions/locate_text (which only ever return small
+    // matched fragments), this tool's whole CONTRACT is to return full page
+    // text — so the non-PII sentinel legitimately appears verbatim in both
+    // modes; that is not a leak, it is the feature. The genuine leak check is
+    // narrower: the three PII values must be masked, never raw, in this
+    // (default) mode.
+    assertNoLeak("extract_pdf_text (masked)", res, [SENTINEL]);
+  });
+});
+
+test("extract_pdf_text: masked:false is the documented raw opt-in — it DOES contain the raw PII values", async () => {
+  await withClient(async (client) => {
+    const res: any = await client.callTool({
+      name: "extract_pdf_text",
+      arguments: { pdfPath: docPath, masked: false },
+    });
+    assert.equal(res.isError, undefined);
+    assert.equal(extractPdfTextOutputSchema.safeParse(res.structuredContent).success, true);
+    assert.equal(res.structuredContent.masked, false);
+    const text = res.structuredContent.pages[0].text;
+    // The whole point of the explicit opt-in: raw values DO appear here.
+    assert.ok(text.includes(CANARY_EMAIL), "raw opt-out must return the exact raw email");
+    assert.ok(text.includes(CANARY_SSN), "raw opt-out must return the exact raw ssn");
+    // Spans are still reported, and still point at the right characters —
+    // offset-preservation even in raw mode.
+    const emailSpan = res.structuredContent.pages[0].spans.find((s: any) => s.kind === "email");
+    assert.ok(emailSpan, "email span must still be reported in raw mode");
+    assert.equal(text.slice(emailSpan.start, emailSpan.end), CANARY_EMAIL);
   });
 });
 
@@ -210,6 +256,22 @@ test("verify_seal: validates outputSchema and leaks nothing", async () => {
     assert.equal(res.structuredContent.verdict, "verified");
     assert.equal(res.structuredContent.sealValid, true);
     assertNoLeak("verify_seal", res);
+  });
+});
+
+test("verify_document: validates outputSchema and leaks nothing", async () => {
+  await withClient(async (client) => {
+    const res: any = await client.callTool({
+      name: "verify_document",
+      arguments: { pdfPath: docPath },
+    });
+    // Same shared engine call as verify_seal (omitly#113) — same isError
+    // discipline: `false` explicitly, not absent.
+    assert.equal(res.isError, false);
+    assert.equal(verifySealOutputSchema.safeParse(res.structuredContent).success, true);
+    assert.equal(res.structuredContent.verdict, "verified");
+    assert.equal(res.structuredContent.sealValid, true);
+    assertNoLeak("verify_document", res);
   });
 });
 

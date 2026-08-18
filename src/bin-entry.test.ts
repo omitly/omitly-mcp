@@ -15,7 +15,7 @@
  *
  * So: run the BUILT `dist/index.js` through a `node_modules/.bin`-style
  * relative symlink, speak real MCP stdio JSON-RPC to it, and require both the
- * `initialize` handshake and a `tools/list` naming all 9 tools. Direct (non-
+ * `initialize` handshake and a `tools/list` naming all 11 tools. Direct (non-
  * symlinked) invocation is covered too, so a "fix" that only works via a
  * symlink also fails.
  */
@@ -33,10 +33,12 @@ const DIST_INDEX = path.join(path.dirname(fileURLToPath(import.meta.url)), "inde
 const EXPECTED_TOOLS = [
   "find_sensitive_regions",
   "locate_text",
+  "extract_pdf_text",
   "redact_by_entity",
   "redact_pdf",
   "verify_redaction",
   "verify_seal",
+  "verify_document",
   "create_pdf",
   "check_redaction",
   "check_license",

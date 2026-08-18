@@ -2,6 +2,7 @@
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
 export const engine_version: (a: number) => void;
+export const extract_text: (a: number, b: number, c: number, d: number) => void;
 export const locate: (a: number, b: number, c: number, d: number, e: number) => void;
 export const scan: (a: number, b: number, c: number) => void;
 export const __wbindgen_export: (a: number) => void;

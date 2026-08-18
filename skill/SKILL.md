@@ -49,6 +49,14 @@ removes the underlying bytes and independently verifies each region is empty.
   Report it that way, and point the user at `sealFingerprint` for out-of-band
   comparison if they care about origin.
 
+- **"I received this PDF from someone else — is it genuine?" (recipient, not
+  the person who redacted it)** → `verify_document` (omitly#113). Same
+  check as `verify_seal` above (identical verdicts, same integrity-not-identity
+  caveat) — it exists as a separate, recipient-worded tool/description so the
+  guarantee it makes (report+seal integrity) isn't confused with
+  `verify_redaction`'s survivor re-scan. Also currently native-engine-only —
+  there is no wasm seal-verification path yet.
+
 ## Rules
 
 1. **Never echo a raw sensitive value.** The tools return *masked* previews

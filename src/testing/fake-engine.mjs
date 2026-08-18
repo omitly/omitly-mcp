@@ -4,7 +4,7 @@
  * `leak-canary.test.ts`. Speaks the exact same stdin-JSON/stdout-JSON contract
  * `spawnEngine` in index.ts drives (see that file's module doc), so it can be
  * pointed at via OMITLY_REDACT_BIN / OMITLY_PDF_BIN to exercise every one of
- * the 8 MCP tools end-to-end WITHOUT a Rust toolchain — this repo's real
+ * the 9 MCP tools end-to-end WITHOUT a Rust toolchain — this repo's real
  * `redaction-core` engine correctness is covered by its own Rust test suite;
  * this double exists only to prove the MCP layer's schemas + masking hold.
  *
@@ -184,6 +184,38 @@ function handle(req) {
         ],
         disclosures: [],
       };
+    }
+    case "extract_text": {
+      // omitly#114. One "page" (page 0) — the fixture documents aren't
+      // paginated. `masked` mirrors the real contract's default: omitted (or
+      // explicit `true`) means masked; only an explicit `false` returns raw
+      // text. Spans are CHAR offsets — for this ASCII-only fixture that's
+      // identical to byte offsets, so the char-vs-byte distinction is proven
+      // by the Rust suite (crates/redaction-core), not re-derived here; this
+      // fixture exists to prove the MCP layer's schema + masking hold.
+      const content = readFileSync(req.pdfPath, "utf8");
+      const masked = req.masked !== false;
+      const candidates = findCandidates(content);
+      const spans = [];
+      for (const c of candidates) {
+        const at = content.indexOf(c.text);
+        if (at === -1) continue;
+        spans.push({ kind: c.kind, start: at, end: at + c.text.length });
+      }
+      spans.sort((a, b) => a.start - b.start);
+      let text = content;
+      if (masked) {
+        let out = "";
+        let last = 0;
+        for (const s of spans) {
+          out += content.slice(last, s.start);
+          out += maskPreview(content.slice(s.start, s.end));
+          last = s.end;
+        }
+        out += content.slice(last);
+        text = out;
+      }
+      return { ok: true, masked, pages: [{ page: 0, contentDecoded: true, text, spans }] };
     }
     case "verify_seal": {
       // A canned "verified" seal response — verify_seal's fields (fingerprint,
