@@ -1,7 +1,7 @@
 {
   "name": "omitly-leak-check-mcpb",
   "private": true,
-  "version": "0.1.15",
+  "version": "0.1.16",
   "description": "MCPB bundle (source) for Omitly Redaction Leak Check — the free, diagnosis-only tier, packed to a one-click Claude Desktop extension. Not published to npm; packed with `npm run mcpb:pack` (see ../package.json).",
   "main": "server/index.js",
   "license": "SEE LICENSE IN ../LICENSE",
