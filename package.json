@@ -1,6 +1,6 @@
 {
   "name": "omitly-mcp",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "type": "module",
   "description": "Model Context Protocol server exposing Omitly's local, verifiable PDF redaction to AI agents. Redaction runs on-device \u2014 documents are never uploaded.",
   "keywords": [
