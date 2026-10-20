@@ -11,13 +11,14 @@ orchestrates, the local engine does the cutting and proves it.
 ## 0. One-time setup
 
 ```bash
-# Build the local engine binary (from the repo root)
-# omitly-redact ships with the Omitly desktop application (source not in this repository)
+# The native engine, omitly-redact, is not currently distributed (omitly#1405) and
+# its source is not in this repository; point OMITLY_REDACT_BIN at a copy.
 
-# Register the MCP server with Claude Code
+# Register the MCP server with Claude Code (from the root of this repository,
+# after `npm install && npm run build`)
 claude mcp add omitly -- \
-  env OMITLY_REDACT_BIN=$PWD/target/release/omitly-redact \
-  node $PWD/omitly-mcp/dist/index.js
+  env OMITLY_REDACT_BIN=/abs/path/to/omitly-redact \
+  node $PWD/dist/index.js
 ```
 
 You now have eleven tools available to Claude: `find_sensitive_regions`,
@@ -124,5 +125,5 @@ redacted region — a second, independent pass, not a restatement of step 1.
 - `find_sensitive_regions` / `locate_text` match per text-operator; a string the
   PDF splits across operators may not match as one run. When in doubt, verify
   visually and add regions explicitly.
-- `redact`/`verify` need `qpdf` installed; `find`/`locate` are read-only and
+- `redact`/`verify` need `qpdf` 11.7 or newer installed; `find`/`locate` are read-only and
   don't.

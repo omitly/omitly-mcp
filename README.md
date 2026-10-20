@@ -22,8 +22,10 @@ Desktop, and any other MCP client).
 
 The point of difference: an agent can redact a document **without uploading it
 anywhere**. Redaction runs on-device through the Omitly engine and returns a
-signed audit log proving the data was removed — the opposite of pasting a
-confidential file into a chat model.
+signed audit log recording what was removed; the seal shows the delivered file
+is unchanged since it was sealed. It does not show that nothing else sensitive
+remains in the document — the opposite of pasting a confidential file into a
+chat model.
 
 **Five of the eleven tools (`find_sensitive_regions`, `locate_text`,
 `check_redaction`, `verify_redaction`, `extract_pdf_text`) work out of the
@@ -32,37 +34,76 @@ They run on a wasm-bindgen build of the same detector that powers the web
 leak-checker at omitly.app, bundled directly in this package. `create_pdf`,
 the two write tools (`redact_pdf`, `redact_by_entity`), and the two
 seal-verification tools (`verify_seal`, `verify_document`) still need a
-configured native engine — see "Build & run" below. Neither seal tool has a
+configured native engine — see "Native engine" below. Neither seal tool has a
 wasm fallback yet: there is no wasm seal-verification path (tracked in
 issue #113), so both always require the native engine, even though checking
 a seal needs no licence.
+
+## Install
+
+Add the server to your MCP client with `npx` — nothing to clone, build or
+compile. Published releases ship the wasm detector bundled, so a registry
+install never needs Rust.
+
+Claude Code:
+
+```bash
+claude mcp add omitly --env OMITLY_ALLOWED_DIR=/path/agents/may/touch -- npx -y omitly-mcp
+```
+
+Claude Desktop (`claude_desktop_config.json`), Cursor (`~/.cursor/mcp.json`) and
+Windsurf (`~/.codeium/windsurf/mcp_config.json`) take the same entry:
+
+```jsonc
+{
+  "mcpServers": {
+    "omitly": {
+      "command": "npx",
+      "args": ["-y", "omitly-mcp"],
+      "env": { "OMITLY_ALLOWED_DIR": "/path/agents/may/touch" }
+    }
+  }
+}
+```
+
+Set `OMITLY_ALLOWED_DIR` to the folder holding the documents you want checked;
+without it the server uses the directory it was launched from (see "Access
+control"). Claude Desktop users can instead install the one-click `.mcpb`
+bundle (see "One-click install for Claude Desktop" below).
+
+Five tools work out of the box. `find_sensitive_regions` and `check_redaction`
+are free but EVALUATION-marked and limited to 10 attempts a month, shared
+across the two, without a native engine (`OMITLY_FREE_CAP` changes the number);
+`locate_text`, `verify_redaction` and `extract_pdf_text` are free with no cap. Redaction (`redact_pdf`, `redact_by_entity`),
+`create_pdf` and seal verification need the native engine, which is not
+currently distributed outside the source repo (omitly#1405).
 
 ## Tools
 
 | Tool | What it does |
 |------|--------------|
-| `find_sensitive_regions` | Scans a PDF on-device and returns PII candidates — email/SSN/phone/card plus Australian identifiers (TFN, ABN, ACN, Medicare, Centrelink CRN, IHI, BSB; check-digit validated where a published algorithm exists) — with page + exact coordinates, so the agent selects by entity and never guesses geometry. Best-effort pattern matching, not a compliance assessment. Optional `regions` (`generic`/`us`/`au`) narrows the listed kinds. |
+| `find_sensitive_regions` | Scans a PDF on-device and returns PII candidates — email/SSN/phone/card plus Australian identifiers (TFN, ABN, ACN, Medicare, Centrelink CRN, IHI, BSB; check-digit validated where a published algorithm exists) — with page + exact coordinates, so the agent selects by entity and never guesses geometry. Best-effort pattern matching, not a compliance assessment. Optional `regions` (`generic`/`us`/`au`) narrows the listed kinds. Free tier (wasm) is EVALUATION-marked and counts toward the shared 10-attempts-a-month cap (see "Licensing"); a configured native engine is not capped. |
 | `locate_text` | Resolves literal strings the model supplies (names, addresses — anything regex can't catch) to their page + coordinates. The model does the recognition; the engine does the geometry. |
-| `check_redaction` | Audits an ALREADY-redacted PDF and reports whether sensitive text still survives underneath the redaction marks, in prior incremental-update revisions, metadata, AcroForm fields, or attachments — the "did my black boxes actually remove the data?" check, with a coverage report scoping what was inspected. Free tier (wasm) is EVALUATION-marked and capped to a monthly number of free checks; a configured licensed engine is not capped. |
+| `check_redaction` | Audits an ALREADY-redacted PDF and reports whether sensitive text still survives underneath the redaction marks, in prior incremental-update revisions, metadata, AcroForm fields, or attachments — the "did my black boxes actually remove the data?" check, with a coverage report scoping what was inspected. It also returns `verdict` — `safe_to_send`, `needs_review` (with `blocking` for a problem found) or `cannot_verify` — from the same presented-document check the desktop app's "Check any PDF" runs (native `omitly-redact check` or the bundled wasm `check`, one Rust function), with the fixed-copy result sections (what was checked, problems, review, what could not be checked). The full audit v2 report behind the verdict is not returned by this tool; it is available from the engine's `check` command. A verdict is about the check and what it covered (hidden, covered and recoverable content), never a statement that the document is safe. Free tier (wasm) is EVALUATION-marked and counts toward the shared 10-attempts-a-month cap (see "Licensing"); a configured native engine is not capped. |
 | `extract_pdf_text` | Extracts a PDF's full text, page by page, PII-MASKED BY DEFAULT so raw sensitive values never flood the model's context window. Each page's `spans` report the CHAR offset (not byte offset) and kind of every masked value, so an agent can still reason about position without seeing the raw value. `masked: false` is a documented, explicit opt-in to raw text. Free, no licence, works out of the box on the bundled wasm engine — a native engine is preferred when available (also enables the `regions` filter; wasm ignores it and scans every pattern). Never renders pages to images. |
 | `redact_by_entity` | One-shot: find + filter by kind (`email`/`ssn`/`phone`/`card`/`tfn`/`abn`/`acn`/`medicare`/`crn`/`ihi`/`bsb`) and/or `regions` + redact + verify. The "just scrub the obvious PII" shortcut. |
 | `redact_pdf` | Removes the underlying data from given regions of a PDF, verifies nothing survives, writes the redacted file, and returns the audit log. |
 | `verify_redaction` | Re-scans an already-redacted PDF and returns the verification verdict — the redaction-completeness check. |
-| `verify_seal` | Cryptographically checks a PDF's embedded Omitly audit report and trailing Ed25519 tamper-evidence seal — the tamper-evidence check, distinct from `verify_redaction`. **Integrity, not identity:** the signing key is per-install and rides inside the file, so a valid seal means "unchanged since sealed by the holder of this key", never "produced by Omitly" — compare `sealFingerprint` out-of-band for origin. Requires a native engine; no wasm fallback exists. |
-| `verify_document` | Recipient trust-verification (omitly#113): the same seal/report check as `verify_seal` — not a survivor re-scan — aimed at someone who *received* a PDF from someone else and wants to confirm it's authentic and unaltered, without paying or licensing anything. Free, no licence. Currently requires a native engine like `verify_seal` (no wasm seal-verification path yet). |
+| `verify_seal` | Cryptographically checks a PDF's embedded Omitly audit report and whole-file tamper-evidence seal (seal v1: Ed25519; seal v2, from Omitly 4.0: ML-DSA-87 with ECDSA P-384) — the tamper-evidence check, distinct from `verify_redaction`. **Integrity, not identity:** the signing key rides inside the file (per-install from the desktop app, or one-time for a single output from the engine), so a valid seal means "unchanged since sealed by the holder of this key", never "produced by Omitly" — compare `sealFingerprint` out-of-band for origin. Requires a native engine; no wasm fallback exists. |
+| `verify_document` | Recipient trust-verification (omitly#113): the same seal/report check as `verify_seal` — not a survivor re-scan — aimed at someone who *received* a PDF from someone else and wants to confirm the file is unchanged since it was sealed (integrity, not identity — see `verify_seal`), without paying or licensing anything. Free, no licence. Currently requires a native engine like `verify_seal` (no wasm seal-verification path yet). |
 | `create_pdf` | Generates a clean PDF from Markdown/HTML on-device, rendered through a real browser engine so it looks printed — instead of writing a throwaway reportlab/LaTeX script. |
 | `check_license` | Reports the current licence or trial state — tier, trial days left, the vendor-signed licensee name, which resolution step supplied the licence, and whether it is bound to this machine. Free, takes no arguments, reads no document, and is re-resolved on every call so buy → save licence → call again works without a restart. **Never returns the device fingerprint or the licence file's contents** — device binding is a yes/no. Requires a native engine: the wasm free tier has no licence concept. |
 
 ## PDF generation (`create_pdf`)
 
-`create_pdf` is served by a **separate** binary, `omitly-pdf` (in
-`crates/omitly-pdf`), kept apart from the redaction engine because generation is
+`create_pdf` is served by a **separate** binary, `omitly-pdf`, kept apart from the redaction engine because generation is
 a different trust model from verifiable redaction. It renders Markdown (or raw
 HTML) through a headless Chromium-family browser (Chrome/Chromium/Edge/Brave;
 override with `OMITLY_BROWSER_BIN`) — the same engine family the Omitly app's
-webview uses, so output looks printed rather than script-generated. `omitly-pdf`
-ships with the Omitly desktop application; its source is not in this repository.
-Point `OMITLY_PDF_BIN` at the binary to enable this tool.
+webview uses, so output looks printed rather than script-generated. It needs the
+native `omitly-pdf` binary, which is not currently distributed (omitly#1405) and
+whose source is not in this repository; point `OMITLY_PDF_BIN` at a copy to
+enable this tool.
 
 ```jsonc
 // stdin
@@ -83,16 +124,26 @@ See [DEMO.md](./DEMO.md) for a full Claude Code walkthrough.
 
 The MCP surface (eleven tools, schemas, transport), the native engine binary
 (`crates/omitly-cli`, built as `omitly-redact`), and the bundled wasm engine
-(`crates/leakcheck-wasm`, covering the four free tools without a native
+(`crates/leakcheck-wasm`, covering the five free tools without a native
 binary) are all implemented and pass end-to-end tests. `find_sensitive_regions`
 is a first-pass detector (ASCII patterns, per-show-operator matching): treat
 its hits as *candidates for review*, not a completeness guarantee. An LLM can
 always supply additional regions directly.
 
-**Privacy of findings.** Detection results are returned with a **masked**
-preview (e.g. `•••-••-6789`), never the raw value. The file isn't uploaded *and*
-the secret detected inside it isn't sent back through the model — redaction is
-driven entirely by page + coordinates, so the plaintext stays on the machine.
+**Privacy of findings.** This server processes files locally and never uploads
+them. Every tool result, though, is returned to your MCP client, so it enters
+that client's model context and goes wherever the client sends it: "nothing is
+uploaded" describes the file, not the results. The detection tools
+(`find_sensitive_regions`, `check_redaction`, `verify_redaction`) return a
+**masked** preview of each finding (e.g. `•••-••-6789`) rather than the raw
+value, and redaction is driven by page + coordinates. `extract_pdf_text` masks
+recognised values by default, but `masked: false` is an explicit opt-in under
+which raw text appears verbatim in the result and in the model's context.
+Masking covers only the recognised pattern kinds (email, SSN, phone, card and
+the Australian identifiers): a name, an address or a clause the detector does
+not know is returned as ordinary text. `locate_text` hits also carry a
+masked preview, but that mask hides all but the last four letters or digits of
+whatever text matched, so short or distinctive strings stay partly legible.
 
 ### Engine contract (implemented in `crates/omitly-cli`)
 
@@ -116,9 +167,9 @@ a JSON response from stdout. Any failure returns `{ "ok": false, "error": "..." 
 { "command": "extract_text", "pdfPath": "..." }
 // stdout — "spans" offsets are CHAR (not byte) offsets into "text", valid
 // against either the masked or the raw text of the same page (masking never
-// changes a page's character count). A page that could not be decoded
-// reports "contentDecoded": false with empty text/spans rather than being
-// silently skipped.
+// changes a page's character count). A page whose text could not be fully
+// read reports "contentDecoded": false rather than being silently skipped;
+// any text that was read is still returned, so treat that page as incomplete.
 { "ok": true, "masked": true, "pages": [
   { "page": 0, "contentDecoded": true,
     "text": "Sensitive sample line: SSN •••-••-6789",
@@ -143,7 +194,7 @@ a JSON response from stdout. Any failure returns `{ "ok": false, "error": "..." 
 ```
 
 ```jsonc
-// stdin — checks the embedded audit report + trailing Ed25519 seal, not
+// stdin — checks the embedded audit report + whole-file seal (v1 or v2), not
 // redaction completeness (that's "verify" above)
 { "command": "verify_seal", "pdfPath": "..." }
 // stdout — verdict is one of: no_report | seal_invalid |
@@ -151,6 +202,9 @@ a JSON response from stdout. Any failure returns `{ "ok": false, "error": "..." 
 // means this verifier is too old to check the seal at all — sealValid is
 // `null` (checked nothing), never true or false; carriesAuditReport flags
 // whether the file also carries an Omitly audit report (escalation signal).
+// sealRemoved (omitly#1591) is true when the file carries a sealed report but
+// no seal at all (typically re-saved in another app) — a reason beside
+// seal_invalid or a v2 cannot_verify, never a verdict of its own.
 { "ok": true, "verdict": "verified", "sealValid": true, "sealFingerprint": "...",
   "allPassed": true, "metadataScrubbed": true, "regionCount": 2, "pageCount": 4,
   "warnings": [], "licenseProvenance": null,
@@ -158,50 +212,35 @@ a JSON response from stdout. Any failure returns `{ "ok": false, "error": "..." 
   "sourceFilename": "...", "outputFilename": "..." }
 ```
 
+```jsonc
+// stdin — omitly#1267: the Safe to Send verdict over the file AS PRESENTED
+// (the desktop "Check any PDF" check; the bundled wasm `check` returns the
+// same object). Free, read-only, no qpdf.
+{ "command": "check", "pdfPath": "..." }
+// stdout — verdict is one of: safe_to_send | needs_review | cannot_verify;
+// "blocking" marks a problem found (e.g. text recoverable under a box).
+// These are verdicts about the CHECK, scoped to what it covered
+// (result.checked / result.notChecked) — never "the document is safe".
+// "report" is the presented audit v2 report, present only when it verified;
+// "reason_code" is set only for input_too_large / check_failed.
+{ "ok": true, "check": { "verdict": "needs_review", "blocking": true,
+  "result": { "state": "needs_review", "summary": "...", "problems": [ { "text": "...", "pages": [1] } ], ... },
+  "report": { "schema": "omitly.audit/v2", "release_check": { "mode": "presented", "overall": "unsafe", ... }, ... },
+  "reason_code": null } }
+```
+
 The MCP tool `verify_document` (omitly#113) shells out to the exact same
 `verify_seal` engine command above — it is the recipient-facing name/wording
 for the same seal/report integrity check, not a separate engine command.
 
-## Build & run
+## Native engine
 
-**Free tools only (find_sensitive_regions, locate_text, check_redaction,
-verify_redaction, extract_pdf_text) — no native engine needed:**
-
-```bash
-cd omitly-mcp
-npm install    # published releases ship the wasm build already bundled
-npm run build  # plain tsc; the wasm bundle ships prebuilt in wasm/
-node dist/index.js
-```
-
-`npm install omitly-mcp` from the registry gets a package with `wasm/`
-already built — a published install never needs Rust.
-
-This repository also ships the compiled wasm bundle in `wasm/`, alongside
-`wasm/leakcheck_wasm_bg.wasm.sha256` so you can verify the byte-for-byte
-artifact you received. It is the same bundle published in the npm package.
-That means `npm install && npm run build && npm test` works here with no Rust
-toolchain: `npm run build` is plain `tsc`. The wasm is compiled from the
-Omitly detection engine, whose Rust source is not part of this repository
-(see "Repository scope" below).
-
-**Everything, including `create_pdf`, `verify_seal`, `verify_document`, and
-the two write tools (`redact_pdf`, `redact_by_entity`):** neither seal tool
-has a wasm fallback — unlike the five free tools above, they always need the
-native engine configured, even though checking a seal carries no licence
-requirement (see "Licensing" below).
-
-```bash
-# Build and start the MCP server (no Rust toolchain needed)
-npm install
-npm run build
-node dist/index.js
-
-# To enable the native-engine tools as well, point at a directory containing
-# the Omitly engine binaries (omitly-redact, omitly-pdf). These ship with the
-# Omitly desktop application; their source is not in this repository.
-OMITLY_ENGINE_DIR=/abs/path/to/engine node dist/index.js
-```
+`create_pdf`, `verify_seal`, `verify_document` and the two write tools
+(`redact_pdf`, `redact_by_entity`) always need a native engine configured; the
+five free tools use the bundled wasm engine unless one is. The native binaries
+(`omitly-redact`, `omitly-pdf`) are not currently distributed outside the source
+repo (omitly#1405). Neither seal tool has a wasm fallback, even though checking a
+seal carries no licence requirement (see "Licensing" below).
 
 One env var covers both binaries: `OMITLY_ENGINE_DIR` is the directory holding
 `omitly-redact` and `omitly-pdf`. Per-binary overrides (`OMITLY_REDACT_BIN`,
@@ -247,50 +286,25 @@ the audit output is permanently marked as evaluation output. The redaction
 itself is never degraded, and licence checks never touch the network.
 `find_sensitive_regions`, `locate_text`, `check_redaction`, `verify_redaction`,
 `verify_seal`, `verify_document`, and `extract_pdf_text` are free — and
-`verify_redaction`/`verify_seal`/`verify_document`/`extract_pdf_text` are free
-forever with **no cap and no marking** (recipient-side verification and
+`locate_text`/`verify_redaction`/`verify_seal`/`verify_document`/`extract_pdf_text`
+are free forever with **no cap and no marking** (recipient-side verification and
 on-device extraction are the point, not a metered funnel). The two free
 *detection* tools (`find_sensitive_regions`, `check_redaction`) on the wasm
 tier — i.e. with no native engine configured — are metered (omitly#226):
 results carry an `evaluation: true` flag plus an EVALUATION banner, and after
-a monthly number of free checks (default 10, `OMITLY_FREE_CAP` to tune) the
-tool returns a structured `{ blocked: true, reason: "free-cap" }` refusal
+10 attempts a month across the two tools (one shared counter; `OMITLY_FREE_CAP`
+changes the number) the tool returns a structured `{ blocked: true, reason: "free-cap" }` refusal
 until the month rolls over. The count lives in `~/.omitly/usage.json`
 (override the directory with `OMITLY_STATE_DIR`; written 0600) and is
 **local-only — nothing ever phones home**; deleting the file resets the free
 count, which is accepted (the no-network doctrine makes it unavoidable), and
-the counter is deliberately never consulted by any paid write path. Calls
-served by a configured native engine are not metered here — that user is in
+the counter is deliberately never consulted by any paid write path. An
+attempt is counted before the scan runs, so a failed attempt still counts.
+Calls served by a configured native engine (licensed or not) are not metered here — that user is in
 the engine funnel, where the licence rules above apply. `verify_seal` and
 `verify_document` (both native-only) stay free by the same design in
 `crates/omitly-cli` (no Pro/Personal licence check on that command path
 either — both tools shell out to the identical `verify_seal` engine command).
-
-## Register with Claude Code
-
-```bash
-claude mcp add omitly -- env \
-  OMITLY_ENGINE_DIR=/path/to/engine-dir \
-  OMITLY_ALLOWED_DIR=/path/agents/may/touch \
-  node /abs/path/to/omitly-mcp/dist/index.js
-```
-
-Or in Claude Desktop's `claude_desktop_config.json`:
-
-```jsonc
-{
-  "mcpServers": {
-    "omitly": {
-      "command": "node",
-      "args": ["/abs/path/to/omitly-mcp/dist/index.js"],
-      "env": {
-        "OMITLY_ENGINE_DIR": "/path/to/engine-dir",
-        "OMITLY_ALLOWED_DIR": "/path/agents/may/touch"
-      }
-    }
-  }
-}
-```
 
 ## One-click install for Claude Desktop (MCPB, free tier only)
 
@@ -309,7 +323,78 @@ accident.
 [mcp/latest.json](https://releases.omitly.app/mcp/latest.json)). Drag the
 downloaded file into Claude Desktop, or use "Install Extension…".
 
-Or build it yourself from source:
+To build the bundle yourself, see "Building from source".
+
+**Not signed** (`mcpb sign` needs a code-signing cert we don't have yet — same
+gate as desktop app signing). `mcpb info` on the packed file confirms
+`WARNING: Not signed`. Whether Claude Desktop's "Install Extension…" flow
+blocks or just warns on an unsigned `.mcpb` has NOT been confirmed against the
+real Desktop app in this change (no Desktop GUI in this environment) — that
+check is still open, tracked in omitly#225.
+
+## Building from source
+
+Building this repository. A registry install (see "Install") needs none of this.
+
+**The server and the free tools (no native engine):**
+
+```bash
+cd omitly-mcp
+npm install
+npm run build  # plain tsc; the wasm bundle ships prebuilt in wasm/
+node dist/index.js
+```
+
+This repository ships the compiled wasm bundle in `wasm/`, alongside
+`wasm/leakcheck_wasm_bg.wasm.sha256` so you can verify the byte-for-byte
+artifact you received. It is the same bundle published in the npm package.
+That means `npm install && npm run build && npm test` works here with no Rust
+toolchain: `npm run build` is plain `tsc`. The wasm is compiled from the
+Omitly detection engine, whose Rust source is not part of this repository
+(see "Repository scope" above).
+
+**The native engine binaries** (for `create_pdf`, the seal tools and the write
+tools; see "Native engine"):
+
+```bash
+# Build and start the MCP server (no Rust toolchain needed)
+npm install
+npm run build
+node dist/index.js
+
+# To enable the native-engine tools as well, point at a directory containing
+# the Omitly engine binaries (omitly-redact, omitly-pdf). They are not currently
+# distributed (omitly#1405), and their source is not in this repository.
+OMITLY_ENGINE_DIR=/abs/path/to/engine node dist/index.js
+```
+
+**Registering a local build** with Claude Code:
+
+```bash
+claude mcp add omitly -- env \
+  OMITLY_ENGINE_DIR=/path/to/engine-dir \
+  OMITLY_ALLOWED_DIR=/path/agents/may/touch \
+  node /abs/path/to/omitly-mcp/dist/index.js
+```
+
+or in Claude Desktop's `claude_desktop_config.json`:
+
+```jsonc
+{
+  "mcpServers": {
+    "omitly": {
+      "command": "node",
+      "args": ["/abs/path/to/omitly-mcp/dist/index.js"],
+      "env": {
+        "OMITLY_ENGINE_DIR": "/path/to/engine-dir",
+        "OMITLY_ALLOWED_DIR": "/path/agents/may/touch"
+      }
+    }
+  }
+}
+```
+
+**The MCPB bundle:**
 
 ```bash
 npm run mcpb:pack   # copy wasm/ into mcpb/wasm + npm install + mcpb pack
@@ -320,10 +405,3 @@ npm run mcpb:pack   # copy wasm/ into mcpb/wasm + npm install + mcpb pack
 (builds the shared wasm detector once, then copies it into `mcpb/` — see
 `mcpb/scripts/copy-wasm.mjs`). The packed `.mcpb` itself needs nothing but
 Node, already bundled inside Claude Desktop.
-
-**Not signed** (`mcpb sign` needs a code-signing cert we don't have yet — same
-gate as desktop app signing). `mcpb info` on the packed file confirms
-`WARNING: Not signed`. Whether Claude Desktop's "Install Extension…" flow
-blocks or just warns on an unsigned `.mcpb` has NOT been confirmed against the
-real Desktop app in this change (no Desktop GUI in this environment) — that
-check is still open, tracked in omitly#225.

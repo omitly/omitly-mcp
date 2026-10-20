@@ -32,9 +32,16 @@ import { z } from "zod";
 import { ENGINE_OUTPUT_CAP_BYTES, resolveEngineTimeoutMs } from "./engine-config.js";
 import { allowedRoot, confineInput, confineOutput } from "./paths.js";
 import {
-  isSealErrorVerdict,
+  isSealError,
+  userVerdictLabel,
+  v2Verdict,
+  AUDIT_V2_OVERALLS,
+  USER_VERDICTS,
+  DECISION_CHANNELS,
   normalizeSealResult,
+  SEAL_REMOVED_SUMMARY,
   SEAL_VERDICTS,
+  type DecisionChannel,
   type NormalizedSealResult,
 } from "./seal.js";
 import {
@@ -67,6 +74,10 @@ type WasmEngine = {
   scan(bytes: Uint8Array): string;
   locate(bytes: Uint8Array, needlesJson: string): string;
   extract_text(bytes: Uint8Array, masked: boolean): string;
+  /** omitly#1267: the Safe to Send verdict. Optional because a wasm build
+   *  that predates it has no such export — that is `check_unavailable`,
+   *  never a thrown error. */
+  check?(bytes: Uint8Array): string;
 };
 let wasmEngine: WasmEngine | undefined;
 try {
@@ -88,6 +99,8 @@ interface WasmLeak {
 }
 interface WasmScanResult {
   ok: boolean;
+  /** omitly#1473: absent on a result from a build that predates the field. */
+  scan_complete?: boolean;
   count: number;
   clean: boolean;
   total_findings: number;
@@ -107,6 +120,7 @@ function wasmScanToFindShape(raw: string): any {
   if (!r.ok) return { ok: false, error: r.error ?? "wasm scan failed" };
   return {
     ok: true,
+    scan_complete: r.scan_complete,
     clean: r.clean,
     count: r.count,
     total_findings: r.total_findings,
@@ -144,6 +158,13 @@ function runWasmExtractText(bytes: Buffer, masked: boolean): any {
     return { ok: false, error: "bundled wasm engine not built — run `npm run build` (needs wasm-pack + Rust)" };
   }
   return JSON.parse(wasmEngine.extract_text(new Uint8Array(bytes), masked));
+}
+
+/** omitly#1267: the wasm `check` export's JSON, parsed — see
+ *  `checkViaEngineOrWasm`. */
+function runWasmCheck(bytes: Buffer): any {
+  if (!wasmEngine?.check) return undefined;
+  return JSON.parse(wasmEngine.check(new Uint8Array(bytes)));
 }
 
 /** Single source of truth for the server version (keeps the MCP handshake in
@@ -275,6 +296,9 @@ function toOutputRegion(r: any) {
 
 export const findSensitiveRegionsOutputSchema = z
   .object({
+    /** omitly#1473: false = some page or stream could not be read, so `count`
+     *  speaks only for what was read. Read this before `count`. */
+    scanComplete: z.boolean(),
     count: z.number().int().min(0),
     regions: z.array(outputRegionSchema),
     note: z.string().optional(),
@@ -323,6 +347,16 @@ const auditOutputSchema = z
     license: z.string(),
     licensedTo: z.string().nullable(),
     disclosures: z.array(z.string()),
+    /** omitly#1104: the report format the engine embedded. */
+    auditSchema: z.enum(["omitly.audit/v1", "omitly.audit/v2"]).nullable(),
+    /** omitly#1104: the Safe to Send verdict of a v2 output, computed by the
+     *  engine from the published bytes; null for a v1 output. */
+    userVerdict: z.enum(USER_VERDICTS).nullable(),
+    blocking: z.boolean().nullable(),
+    /** omitly#1496 (v1: omitly#228): the channel the engine recorded for
+     *  this redaction — `mcp-agent` for this server's write tools. null for
+     *  anything outside the closed set. */
+    decisionChannel: z.enum(DECISION_CHANNELS).nullable(),
   })
   .strict();
 
@@ -346,7 +380,43 @@ function toOutputAudit(a: any) {
     license: a.license,
     licensedTo: a.licensedTo ?? null,
     disclosures: a.disclosures ?? [],
+    ...auditVerdict(a),
+    decisionChannel: DECISION_CHANNELS.includes(a.decisionChannel) && a.decisionChannel !== "none"
+      ? (a.decisionChannel as DecisionChannel)
+      : null,
   };
+}
+
+/** omitly#1104: the v2 verdict of an engine `audit` object, fail-closed
+ *  through the same check `verify_seal` uses (`v2Verdict`). */
+function auditVerdict(a: any): {
+  auditSchema: "omitly.audit/v1" | "omitly.audit/v2" | null;
+  userVerdict: (typeof USER_VERDICTS)[number] | null;
+  blocking: boolean | null;
+} {
+  const schema = a?.auditSchema;
+  if (schema === "omitly.audit/v2") {
+    const v = v2Verdict({
+      auditV2Recognized: true,
+      auditV2Overall: a.auditV2Overall,
+      userVerdict: a.userVerdict,
+      blocking: a.blocking,
+    });
+    return { auditSchema: schema, userVerdict: v.userVerdict, blocking: v.blocking };
+  }
+  return {
+    auditSchema: schema === "omitly.audit/v1" ? schema : null,
+    userVerdict: null,
+    blocking: null,
+  };
+}
+
+/** omitly#1104: the "Result:" line of a redaction's text output, for a v2
+ *  output only. */
+function resultLine(audit: ReturnType<typeof toOutputAudit>): string {
+  return audit.userVerdict === null
+    ? ""
+    : `Result: ${userVerdictLabel(audit.userVerdict, audit.blocking)}\n`;
 }
 
 export const redactByEntityOutputSchema = z
@@ -370,6 +440,69 @@ export const redactPdfOutputSchema = z
   })
   .strict();
 
+/**
+ * omitly#1473 (owner decision, option b): `clean` keeps its #538 meaning
+ * ("nothing found where we looked") and a SEPARATE field says whether the scan
+ * was complete — every page and content stream read. Every text surface shows
+ * completeness BEFORE the clean/count headline, because "No recoverable PII
+ * found" over a document where no page could be read is a false clean.
+ *
+ * `complete` is true only when the engine said so. An engine that does not
+ * report the field (a build older than this change) cannot vouch for
+ * completeness, so it is `complete: false, reported: false` — fail closed, with
+ * wording that does not claim a page failed.
+ */
+export function scanCompleteness(res: any): { complete: boolean; reported: boolean } {
+  const v = res?.scan_complete ?? res?.coverage?.scan_complete;
+  return typeof v === "boolean" ? { complete: v, reported: true } : { complete: false, reported: false };
+}
+
+/** The warning for an incomplete scan; "" when the scan was complete. */
+export function incompleteScanBanner(res: any): string {
+  const { complete, reported } = scanCompleteness(res);
+  if (complete) return "";
+  if (!reported) {
+    return (
+      "⛔ SCAN COMPLETENESS NOT REPORTED — this engine did not say whether every page and " +
+      "stream was read, so the result below cannot be treated as a clean result."
+    );
+  }
+  const cov = res?.coverage ?? {};
+  const failed = Array.isArray(cov.pages_failed) ? cov.pages_failed.length : 0;
+  const rasterOnly = Array.isArray(cov.raster_only_pages) ? cov.raster_only_pages.length : 0;
+  // WHY it is incomplete, from the coverage the engine already reports. The
+  // image-only and generic OCR lines are restated from the structured counts.
+  const why = [
+    failed > 0 && `${failed} page(s) could not be parsed`,
+    rasterOnly > 0 && `${rasterOnly} page(s) are images only and were not text-scanned (no OCR)`,
+    ...((Array.isArray(cov.not_scanned) ? cov.not_scanned : []) as string[]).filter(
+      (n) => !/effectively image-only|needs OCR/.test(n),
+    ),
+  ].filter(Boolean) as string[];
+  const read =
+    typeof cov.pages_scanned === "number" && typeof cov.pages_total === "number"
+      ? ` ${cov.pages_scanned} of ${cov.pages_total} page(s) had readable text.`
+      : "";
+  return (
+    "⛔ INCOMPLETE SCAN — some of this document was not read, so the result below speaks " +
+    `only for what was read (possibly nothing).${read}` +
+    (why.length ? ` Why: ${why.join("; ")}.` : "") +
+    " This is NOT a clean result."
+  );
+}
+
+/** Leads sidecar-mode `verify_redaction` text: what that check is and is not. */
+export const SIDECAR_VERIFY_NOTE =
+  "ℹ️ Region check only: this confirms the recorded redaction regions are empty and runs the " +
+  "hidden-content checks. It did NOT scan the whole document for PII, so it says nothing about " +
+  "other content. Use check_redaction for a full scan.";
+
+/** The line every text surface leads with: the incomplete-scan warning, or an
+ *  explicit statement that the scan was complete. Never empty. */
+export function scanStatusLine(res: any): string {
+  return incompleteScanBanner(res) || "✅ Scan complete: all text on every page and in every stream was read. Images are not OCR'd.";
+}
+
 /** A single leak/finding surfaced by `verify_redaction` — never the raw
  *  matched text. `reason`/`detail`/`class` are structural (which check
  *  failed, why), `preview` is the engine's masked preview. */
@@ -386,6 +519,8 @@ const verifyFindingOutputSchema = z
 
 export const verifyRedactionOutputSchema = z
   .object({
+    /** omitly#1473: rescan mode only; false = the scan did not read everything. */
+    scanComplete: z.boolean().optional(),
     clean: z.boolean(),
     mode: z.enum(["sidecar", "rescan"]),
     verdict: z.enum(["pass", "fail"]).optional(),
@@ -489,6 +624,13 @@ export const verifySealOutputSchema = z
     outputSha256: z.string().nullable(),
     sourceFilename: z.string().nullable(),
     outputFilename: z.string().nullable(),
+    /** omitly#1104: the Safe to Send result of a v2 report; null for v1. */
+    auditV2Overall: z.enum(AUDIT_V2_OVERALLS).nullable(),
+    userVerdict: z.enum(USER_VERDICTS).nullable(),
+    blocking: z.boolean().nullable(),
+    /** omitly#1593: the file carries a sealed report but no seal at all. A
+     *  reason beside a failure verdict, never a verdict itself. */
+    sealRemoved: z.boolean(),
   })
   .strict();
 
@@ -513,12 +655,33 @@ function toOutputSeal(res: NormalizedSealResult) {
     outputSha256: res.outputSha256,
     sourceFilename: res.sourceFilename,
     outputFilename: res.outputFilename,
+    auditV2Overall: res.auditV2Overall,
+    userVerdict: res.userVerdict,
+    blocking: res.blocking,
+    sealRemoved: res.sealRemoved,
   };
+}
+
+/** omitly#1104: the summary line for a v2 report — its verdict label, then
+ *  the same integrity-not-origin statement the v1 pass line makes. */
+function v2SealSummary(res: NormalizedSealResult): string {
+  const verdict = res.userVerdict ?? "cannot_verify";
+  const label = userVerdictLabel(verdict, res.blocking);
+  if (verdict === "cannot_verify") {
+    return `⚠️ Result: ${label} — do not treat this file's audit trail as trustworthy.`;
+  }
+  const mark = verdict === "safe_to_send" ? "✅" : "⚠️";
+  return (
+    `${mark} Result: ${label}. Seal valid — these bytes are unchanged since they were sealed. ` +
+    `That is an INTEGRITY check, not proof of origin: the signing key ships with the file (it is ` +
+    `per-install, or one-time for a single output), so compare the fingerprint (${res.sealFingerprint ?? "none reported"}) ` +
+    `out-of-band against what the sender published if you need to know who sealed it.`
+  );
 }
 
 /** Shared core for `verify_seal` and `verify_document` (omitly#113) — both
  *  tools check exactly the same thing (the CLI's `verify_seal` engine
- *  command: the embedded audit report + trailing Ed25519 seal) and only
+ *  command: the embedded audit report + whole-file seal, v1 or v2) and only
  *  differ in their tool name/description and the wording of their summary
  *  text, so the confine → runEngine → normalize → schema-check pipeline
  *  lives here once. Currently native-engine-only — there is no wasm
@@ -587,8 +750,106 @@ function toOutputExtractedPage(p: any) {
   };
 }
 
+/** omitly#1267: the three verdicts, exactly as the engine and wasm spell them
+ *  (`omitly_seal::audit_v2::CheckState`). Never reconstructed here. */
+const CHECK_STATE = z.enum(["safe_to_send", "needs_review", "cannot_verify"]);
+
+/** The fixed reason codes a verdict can carry: the two the shared Rust
+ *  wrapper sets (`omitly_seal::check::FREE_REASON_*`) and the one this
+ *  server sets when the configured engine or the bundled wasm has no `check`
+ *  (an older build). */
+const CHECK_REASON_CODE = z.enum(["input_too_large", "check_failed", "check_unavailable", "result_invalid"]);
+
+/** Engine output, even when it is "fixed copy": at most 1 KiB, no control
+ *  characters (C0, DEL, C1) and no line or paragraph separators, so a line
+ *  can neither carry a payload nor forge extra lines in the text output. The
+ *  longest line in `omitly_seal::check::COPY` is about 250 bytes. */
+const COPY_LINE = z
+  .string()
+  .max(1024)
+  .regex(/^[^\u0000-\u001f\u007f-\u009f\u2028\u2029]*$/);
+const PAGE_LIST_MAX = 10_000;
+const ITEMS_MAX = 1024;
+
+const checkItemSchema = z
+  .object({
+    /** A fixed line from the engine's own copy table — never document text. */
+    text: COPY_LINE,
+    /** 1-based page numbers, when the line concerns specific pages. */
+    pages: z.array(z.number().int().min(1).max(1_000_000)).max(PAGE_LIST_MAX).optional(),
+  })
+  .strict();
+
+/** The desktop Check screen's `CheckResult`, field for field, minus the two
+ *  desktop-only fields (`canWrite`, `producer`). */
+const checkResultOutputSchema = z
+  .object({
+    state: CHECK_STATE,
+    blocking: z.boolean(),
+    summary: COPY_LINE,
+    pagesTotal: z.number().int().min(0).max(1_000_000),
+    pagesRead: z.number().int().min(0).max(1_000_000),
+    checked: z.array(checkItemSchema).max(ITEMS_MAX),
+    notChecked: z.array(checkItemSchema).max(ITEMS_MAX),
+    problems: z.array(checkItemSchema).max(ITEMS_MAX),
+    review: z.array(checkItemSchema).max(ITEMS_MAX),
+    information: z.array(checkItemSchema).max(ITEMS_MAX),
+    decisions: z.array(checkItemSchema).max(ITEMS_MAX),
+    reasons: z.array(checkItemSchema).max(ITEMS_MAX),
+    /** RFC 3339 UTC, as both engines write it. */
+    checkedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?Z$/),
+    omitlyVersion: z.string().max(64).regex(/^[0-9A-Za-z.+-]+$/),
+    /** Empty only when the file was refused unread (`input_too_large`). */
+    sha256: z.string().regex(/^([0-9a-f]{64})?$/),
+    sizeBytes: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+    /** omitly#1496: the verified report's `provenance.decision_channel` —
+     *  a closed-set code (`none` for a presented check: nothing was
+     *  decided). A record of process, not proof. null when the engine sent
+     *  none (an older engine, or a report that predates the field). */
+    decisionChannel: z.enum(DECISION_CHANNELS).nullable(),
+  })
+  .strict();
+
+/** What the engine and wasm actually send: the output shape plus the two
+ *  desktop-only fields, which are dropped on the way out, and
+ *  `decisionChannel` omitted when there is none. Strict — any other field
+ *  fails the whole result. */
+const checkResultEngineSchema = checkResultOutputSchema
+  .extend({
+    canWrite: z.literal(false),
+    producer: z.null(),
+    decisionChannel: z.enum(DECISION_CHANNELS).optional(),
+  })
+  .strict();
+
+/**
+ * omitly#1267: the Safe to Send verdict — the same object the browser
+ * checker's wasm `check` and `omitly-redact`'s `check` command return. The
+ * states are verdicts about THIS CHECK, scoped to what it covered (see
+ * `result.checked` / `result.notChecked`); none of them says the document is
+ * safe.
+ *
+ * The engine's audit v2 report is deliberately NOT part of this output
+ * (coordinator decision on the #1267 review): it is engine output this server
+ * cannot validate — the shared validator needs applicability recomputed from
+ * the PDF, which only the Rust engine can do — and a model-facing tool needs
+ * the verdict and the validated fixed-copy `result`, not the report. The
+ * report is available from `omitly-redact check` and the desktop app.
+ */
+export const checkVerdictOutputSchema = z
+  .object({
+    verdict: CHECK_STATE,
+    blocking: z.boolean(),
+    result: checkResultOutputSchema.nullable(),
+    reason_code: CHECK_REASON_CODE.nullable(),
+  })
+  .strict();
+
 export const checkRedactionOutputSchema = z
   .object({
+    /** omitly#1473: false = some page or stream could not be read, so `clean`
+     *  speaks only for what was read (possibly nothing). Read before `clean`. */
+    scanComplete: z.boolean(),
     clean: z.boolean(),
     totalFindings: z.number().int().min(0),
     byKind: z.record(z.string(), z.number().int()),
@@ -596,11 +857,119 @@ export const checkRedactionOutputSchema = z
     survivors: z.array(outputRegionSchema),
     offPage: z.array(offPageOutputSchema),
     coverage: coverageOutputSchema,
+    /** omitly#1267: the Safe to Send verdict over the same file, from the
+     *  same presented check the desktop "Check any PDF" runs. */
+    verdict: checkVerdictOutputSchema,
     /** Present (and true) on free-tier (wasm-served, unlicensed) results —
      *  omitly#226's EVALUATION mark. Never present on native-engine results. */
     evaluation: z.literal(true).optional(),
   })
   .strict();
+
+const UNAVAILABLE = {
+  verdict: "cannot_verify" as const,
+  blocking: false,
+  result: null,
+  reason_code: "check_unavailable" as const,
+};
+
+/** Validate an engine/wasm verdict before any of it reaches the model — the
+ *  same allowlist defence as `toOutputRegion`, but strict: a `result` that is
+ *  not exactly the CheckResult shape (unknown field, control character,
+ *  over-long line, malformed digest or time, or a state/blocking that
+ *  disagrees with the verdict), or an unknown `reason_code`, drops the result
+ *  and forces `cannot_verify` / `result_invalid`. The engine's `report` is
+ *  never copied. A missing verdict is
+ *  `check_unavailable`. Never a pass on bad input. */
+function toOutputVerdict(raw: any) {
+  if (!raw || typeof raw !== "object" || !CHECK_STATE.safeParse(raw.verdict).success) {
+    return UNAVAILABLE;
+  }
+  const invalid = {
+    verdict: "cannot_verify" as const,
+    blocking: false,
+    result: null,
+    reason_code: "result_invalid" as const,
+  };
+  if (typeof raw.blocking !== "boolean") return invalid;
+  const reason = raw.reason_code === null || raw.reason_code === undefined ? null : CHECK_REASON_CODE.safeParse(raw.reason_code);
+  if (reason && !reason.success) return invalid;
+  let result: z.infer<typeof checkResultOutputSchema> | null = null;
+  if (raw.result !== null && raw.result !== undefined) {
+    const parsed = checkResultEngineSchema.safeParse(raw.result);
+    if (!parsed.success) return invalid;
+    const { canWrite: _canWrite, producer: _producer, decisionChannel, ...rest } = parsed.data;
+    if (rest.state !== raw.verdict || rest.blocking !== raw.blocking) return invalid;
+    result = { ...rest, decisionChannel: decisionChannel ?? null };
+  } else if (raw.verdict !== "cannot_verify") {
+    // Only a refusal may come without its result.
+    return invalid;
+  }
+  return {
+    verdict: raw.verdict,
+    blocking: raw.blocking,
+    result,
+    // `raw.report` is never copied: see checkVerdictOutputSchema.
+    reason_code: reason ? reason.data : null,
+  };
+}
+
+/** The verdict as text: the heading (the same three states the desktop
+ *  shows), the check's own summary, then its sections exactly as the engine
+ *  wrote them — fixed lines with page numbers, never document text. */
+export function verdictHeading(v: z.infer<typeof checkVerdictOutputSchema>): string {
+  const r = v.result;
+  const lines = (title: string, items: { text: string; pages?: number[] }[] | undefined) =>
+    items && items.length
+      ? `\n  ${title}:\n` +
+        items.map((i) => `    - ${i.text}${i.pages ? ` (pages ${i.pages.join(", ")})` : ""}`).join("\n")
+      : "";
+  return (
+    verdictHeadline(v) +
+    lines("Checked", r?.checked) +
+    lines("Problems", r?.problems) +
+    lines("Review", r?.review) +
+    lines("Could not be checked", v.verdict === "cannot_verify" ? r?.reasons : r?.notChecked) +
+    lines("Information", r?.information)
+  );
+}
+
+function verdictHeadline(v: z.infer<typeof checkVerdictOutputSchema>): string {
+  const label =
+    v.verdict === "safe_to_send"
+      ? "Safe to Send"
+      : v.verdict === "needs_review"
+        ? v.blocking
+          ? "Needs Review — problems found"
+          : "Needs Review"
+        : "Cannot Verify";
+  return (
+    `Check verdict: ${label}.` +
+    (v.result?.summary ? ` ${v.result.summary}` : "") +
+    ` (A verdict about this check, limited to what it covered: hidden, covered and ` +
+    `recoverable content. It does not judge whether the visible text should be there — the ` +
+    `pattern findings do — and it is not a statement that the document is safe.)`
+  );
+}
+
+/** omitly#1267: the verdict via the native engine's `check` command when one
+ *  is configured, else the bundled wasm's `check` export — the same Rust
+ *  function (`omitly_seal::check::free_check`) either way. An engine or wasm
+ *  build without `check`, or any failure to run it, is `check_unavailable`. */
+async function checkViaEngineOrWasm(confinedPath: string) {
+  let raw: any;
+  try {
+    if (ENGINE_BIN) {
+      const res = await runEngine({ command: "check", pdfPath: confinedPath });
+      raw = res?.ok ? res.check : undefined;
+    } else {
+      raw = runWasmCheck(readFileSync(confinedPath));
+    }
+  } catch {
+    raw = undefined;
+  }
+  return checked(checkVerdictOutputSchema, toOutputVerdict(raw));
+}
 
 /**
  * Free-tier metering gate (omitly#226) for the two DETECTION tools only.
@@ -797,9 +1166,9 @@ server.registerTool(
     "never the raw value: the secret stays on the machine. You don't need the " +
     "plaintext to redact — drive it by page + coordinates. (A human reviewer " +
     "has the file open locally for full context.) Free tier (no native " +
-    "engine): results are EVALUATION-marked and limited to a monthly number " +
-    "of free checks, counted locally — past the cap this tool returns a " +
-    "structured 'free-cap' refusal. A configured licensed engine is not " +
+    "engine): results are EVALUATION-marked and limited (by default) to 10 " +
+    "attempts a month, shared with check_redaction and counted locally — past the cap this tool returns a " +
+    "structured 'free-cap' refusal. A configured native engine is not " +
     "capped.",
     inputSchema: {
       pdfPath: z.string().describe("absolute path to the PDF to scan"),
@@ -827,13 +1196,17 @@ server.registerTool(
         };
       }
       const found = res.regions ?? [];
+      const completeness = scanCompleteness(res);
+      const incomplete = scanStatusLine(res);
       const summary =
+        (incomplete ? `${incomplete}\n\n` : "") +
         (meter ? `${evaluationBanner(meter)}\n\n` : "") +
-        `Found ${found.length} candidate region(s).\n` +
+        `Found ${found.length} candidate region(s)${completeness.complete ? "" : " in the part of the document that could be read"}.\n` +
         `Pass any subset to redact_pdf as its "regions" argument (page + x/y/width/height carry over).\n\n` +
         (res.note ? `Note: ${res.note}\n\n` : "") +
         JSON.stringify(found, null, 2);
       const structuredContent = checked(findSensitiveRegionsOutputSchema, {
+        scanComplete: completeness.complete,
         count: found.length,
         regions: found.map(toOutputRegion),
         ...(res.note ? { note: res.note as string } : {}),
@@ -988,7 +1361,9 @@ server.registerTool(
             type: "text",
             text:
               `Redacted ${redacted.length} entit${redacted.length === 1 ? "y" : "ies"} → ${res.output}\n` +
-              `Verification: ${res.audit?.verdict ?? "see audit log"}\n\n` +
+              `Verification: ${res.audit?.verdict ?? "see audit log"}\n` +
+              resultLine(audit) +
+              `\n` +
               `Removed:\n${JSON.stringify(redacted, null, 2)}\n\n` +
               `Audit log:\n${JSON.stringify(res.audit, null, 2)}`,
           },
@@ -1049,7 +1424,9 @@ server.registerTool(
             type: "text",
             text:
               `Redacted ${regions.length} region(s) → ${res.output}\n` +
-              `Verification: ${res.audit?.verdict ?? "see audit log"}\n\n` +
+              `Verification: ${res.audit?.verdict ?? "see audit log"}\n` +
+              resultLine(audit) +
+              `\n` +
               `Audit log:\n${JSON.stringify(res.audit, null, 2)}`,
           },
         ],
@@ -1120,6 +1497,10 @@ server.registerTool(
                 detail: c.verification.detail,
               })),
           ];
+          // omitly#1473: sidecar verify re-checks the recorded regions and the
+          // hidden-content classes; it reads no whole document for PII, so
+          // there is no `scanComplete` to report and the text says so rather
+          // than implying a clean scan. `clean` here means those checks passed.
           const structuredContent = checked(verifyRedactionOutputSchema, {
             clean: verdict === "pass",
             mode: "sidecar",
@@ -1128,7 +1509,7 @@ server.registerTool(
             findings,
           });
           return {
-            content: [{ type: "text", text: JSON.stringify(res, null, 2) }],
+            content: [{ type: "text", text: `${SIDECAR_VERIFY_NOTE}\n\n${JSON.stringify(res, null, 2)}` }],
             structuredContent,
             isError: res?.ok === false || verdict === "fail",
           };
@@ -1154,10 +1535,15 @@ server.registerTool(
       // a native engine was configured. Fall back to the regions actually
       // returned, not a bare 0.
       const clean = res.clean ?? (res.total_findings ?? foundRegions.length) === 0;
-      const summary = clean
-        ? `✅ No recoverable PII found on the surfaces scanned (general re-scan — no redaction sidecar to check specific regions against).`
-        : `⚠️ Found ${res.total_findings ?? foundRegions.length ?? 0} recoverable item(s) — this file is not clean.\n\n${JSON.stringify(res, null, 2)}`;
+      const completeness = scanCompleteness(res);
+      const incomplete = scanStatusLine(res);
+      const summary = (incomplete ? `${incomplete}\n\n` : "") + (clean
+        ? completeness.complete
+          ? `✅ No recoverable PII found on the surfaces scanned (general re-scan — no redaction sidecar to check specific regions against).`
+          : `⚠️ Nothing found in the part of the document that could be read (general re-scan) — see above; this is not a clean result.`
+        : `⚠️ Found ${res.total_findings ?? foundRegions.length ?? 0} recoverable item(s) — this file is not clean.\n\n${JSON.stringify(res, null, 2)}`);
       const structuredContent = checked(verifyRedactionOutputSchema, {
+        scanComplete: completeness.complete,
         clean,
         mode: "rescan",
         totalFindings: res.total_findings ?? foundRegions.length,
@@ -1261,12 +1647,13 @@ server.registerTool(
   "verify_seal",
   {
     description:
-      "Verify a PDF's embedded Omitly audit report and trailing Ed25519 " +
-      "tamper-evidence seal — on-device, nothing uploaded. Distinct from " +
+      "Verify a PDF's embedded Omitly audit report and whole-file " +
+      "tamper-evidence seal (v1: Ed25519; v2: ML-DSA-87 with ECDSA P-384) — on-device, nothing uploaded. Distinct from " +
       "`verify_redaction`: that tool re-checks whether redacted regions are " +
       "still empty; this tool cryptographically checks whether the delivered " +
       "bytes have changed since they were sealed. The seal proves INTEGRITY, " +
-      "NOT IDENTITY: the signing key is per-install and travels with the file, " +
+      "NOT IDENTITY: the signing key travels with the file (per-install, or " +
+      "one-time for a single output), " +
       "so a valid seal means 'unchanged since sealed by the holder of this " +
       "key', never 'produced by Omitly'. Compare `sealFingerprint` " +
       "out-of-band against the fingerprint the sender published if origin " +
@@ -1312,23 +1699,23 @@ server.registerTool(
           structuredContent,
         };
       }
-      // Invariant #2 (CLAUDE.md): the seal key is PER-INSTALL and rides inside
+      // Invariant #2 (CLAUDE.md): the seal key (per-install, or one-time) rides inside
       // the artifact, so a valid seal proves the bytes are unchanged since
       // sealing — it does NOT prove Omitly produced them. Saying "produced by
       // Omitly" here would be the exact overclaim `forged_key_seal_verifies_
       // but_fingerprint_differs` exists to prevent, so the pass line states
       // integrity only and points at the fingerprint for out-of-band origin.
-      const summary =
+      const summary = res.sealRemoved ? SEAL_REMOVED_SUMMARY : res.userVerdict !== null ? v2SealSummary(res) :
         res.verdict === "verified"
           ? `✅ Seal valid — these bytes are unchanged since they were sealed. That is an ` +
-            `INTEGRITY check, not proof of origin: the signing key is per-install and ships ` +
-            `with the file, so compare the fingerprint (${res.sealFingerprint ?? "none reported"}) ` +
+            `INTEGRITY check, not proof of origin: the signing key ships with the file (it is ` +
+            `per-install, or one-time for a single output), so compare the fingerprint (${res.sealFingerprint ?? "none reported"}) ` +
             `out-of-band against what the sender published if you need to know who sealed it.`
           : `⚠️ Seal verdict: ${res.verdict} — do not treat this file's audit trail as trustworthy.`;
       return {
         content: [{ type: "text", text: `${summary}\n\n${JSON.stringify(res, null, 2)}` }],
         structuredContent,
-        isError: isSealErrorVerdict(res.verdict),
+        isError: isSealError(res),
       };
     } catch (e) {
       return {
@@ -1346,13 +1733,14 @@ server.registerTool(
       "Recipient trust-verification: for someone who RECEIVED a PDF from " +
       "someone else and wants to confirm it's an authentic, unaltered Omitly " +
       "output — free tier, no licence required. Confirms the embedded audit " +
-      "report and Ed25519 tamper-evidence seal are valid and unaltered since " +
+      "report and whole-file tamper-evidence seal (v1: Ed25519; v2: ML-DSA-87 " +
+      "with ECDSA P-384) are valid and unaltered since " +
       "sealing, and reports the seal's own attested verdict — this does not " +
       "independently re-scan the document for residual PII. For that " +
       "self-check (typically run by the person who just redacted, not a " +
       "recipient), use `verify_redaction` instead. The seal proves " +
-      "INTEGRITY, NOT IDENTITY: the signing key is per-install and travels " +
-      "with the file, so a valid seal means 'unchanged since sealed by the " +
+      "INTEGRITY, NOT IDENTITY: the signing key travels with the file " +
+      "(per-install, or one-time for a single output), so a valid seal means 'unchanged since sealed by the " +
       "holder of this key', never 'produced by Omitly' — compare " +
       "`sealFingerprint` out-of-band against the fingerprint the sender " +
       "published if origin matters. Currently requires a configured native " +
@@ -1401,11 +1789,11 @@ server.registerTool(
       }
       // Same non-overclaim discipline as verify_seal (CLAUDE.md invariant #2):
       // integrity only, never an origin/production claim.
-      const summary =
+      const summary = res.sealRemoved ? SEAL_REMOVED_SUMMARY : res.userVerdict !== null ? v2SealSummary(res) :
         res.verdict === "verified"
           ? `✅ This document's audit report and seal are intact — unchanged since they were sealed. ` +
-            `That is an INTEGRITY check, not proof of origin: the signing key is per-install and ` +
-            `ships with the file, so compare the fingerprint (${res.sealFingerprint ?? "none reported"}) ` +
+            `That is an INTEGRITY check, not proof of origin: the signing key ships with the file ` +
+            `(it is per-install, or one-time for a single output), so compare the fingerprint (${res.sealFingerprint ?? "none reported"}) ` +
             `out-of-band against what the sender published if you need to know who sealed it. This did ` +
             `NOT re-scan the document for residual PII — use \`verify_redaction\` for that.`
           : res.verdict === "no_report"
@@ -1416,7 +1804,7 @@ server.registerTool(
       return {
         content: [{ type: "text", text: `${summary}\n\n${JSON.stringify(res, null, 2)}` }],
         structuredContent,
-        isError: isSealErrorVerdict(res.verdict),
+        isError: isSealError(res),
       };
     } catch (e) {
       return {
@@ -1492,9 +1880,25 @@ server.registerTool(
       "Nothing is uploaded. (Pattern-based: names/addresses, image-only text, and the " +
       "surfaces listed as not-inspected aren't covered; absence of hits isn't proof of " +
       "completeness.) Free tier (no native engine): reports are EVALUATION-marked — " +
-      "for evaluation, not production reliance — and limited to a monthly number of " +
-      "free checks, counted locally; past the cap this tool returns a structured " +
-      "'free-cap' refusal. A configured licensed engine is not capped.",
+      "for evaluation, not production reliance — and limited (by default) to 10 attempts " +
+      "a month, shared with find_sensitive_regions and counted locally; past the cap this tool returns a structured " +
+      "'free-cap' refusal. A configured native engine is not capped. " +
+      "`scanComplete` is false when some page or stream could not be read; then `clean` " +
+      "only means nothing was found in what WAS read (possibly nothing) and the text leads " +
+      "with an INCOMPLETE SCAN warning — never report such a result as clean. " +
+      "The result also carries `verdict`: the same presented-document check the Omitly " +
+      "desktop app's 'Check any PDF' runs, as one of three verdicts about THE CHECK — " +
+      "'safe_to_send' (every check that applies to this file passed, within what the check " +
+      "covers; `verdict.result.notChecked` lists what it did not), 'needs_review' (something " +
+      "needs a person to look before sending; `blocking` true means a problem such as " +
+      "recoverable text under a box was found), or 'cannot_verify' (the check could not " +
+      "complete, so no verdict is given). The verdict covers hidden, covered and recoverable " +
+      "content (text under boxes, metadata, layers, attachments, earlier versions, comments, " +
+      "alternate text); it does not judge whether VISIBLE text should be there — the pattern " +
+      "findings above do — so a visible identifier can be a finding while the verdict is " +
+      "'safe_to_send'. None of the verdicts is a statement that the document is safe. " +
+      "The full audit v2 report behind the verdict is not returned here; it is available " +
+      "from the engine's `check` command (`omitly-redact`) and the desktop app.",
     inputSchema: {
       pdfPath: z.string().describe("absolute path to the supposedly-redacted PDF to audit"),
     },
@@ -1512,12 +1916,18 @@ server.registerTool(
           isError: true,
         };
       }
+      // omitly#1267: one metered call, two engine passes over the same file —
+      // the v1 scan above and the Safe to Send verdict here.
+      const verdict = await checkViaEngineOrWasm(confined);
       const regions = res.regions ?? [];
       const survivors = res.survivors ?? [];
       const offPage = res.off_page ?? [];
       const cov = res.coverage ?? {};
       const total = res.total_findings ?? regions.length;
       const clean = res.clean ?? total === 0;
+      const completeness = scanCompleteness(res);
+      const incomplete = scanStatusLine(res);
+      const lead = (incomplete ? `${incomplete}\n\n` : "") + (meter ? `${evaluationBanner(meter)}\n\n` : "");
 
       // Honest coverage disclosure — what was inspected, and what was NOT, so a
       // "clean" result is scoped and never reads as "no PII anywhere".
@@ -1544,6 +1954,7 @@ server.registerTool(
 
       if (clean) {
         const structuredContent = checked(checkRedactionOutputSchema, {
+          scanComplete: completeness.complete,
           clean: true,
           totalFindings: 0,
           byKind: {},
@@ -1551,6 +1962,7 @@ server.registerTool(
           survivors: [],
           offPage: [],
           coverage,
+          verdict,
           ...(meter ? { evaluation: true as const } : {}),
         });
         return {
@@ -1558,8 +1970,11 @@ server.registerTool(
             {
               type: "text",
               text:
-                (meter ? `${evaluationBanner(meter)}\n\n` : "") +
-                `✅ No recoverable PII found on the surfaces scanned in ${pdfPath}.\n\n` +
+                lead +
+                (completeness.complete
+                  ? `✅ No recoverable PII found on the surfaces scanned in ${pdfPath}.\n\n`
+                  : `⚠️ Nothing found in the part of ${pdfPath} that could be read — this is NOT a clean result.\n\n`) +
+                `${verdictHeading(verdict)}\n\n` +
                 `${scope}\n\n` +
                 `This is a scoped result, not a completeness guarantee — the surfaces listed as ` +
                 `NOT inspected, plus names/addresses (which need human or model review), are out of ` +
@@ -1585,6 +2000,7 @@ server.registerTool(
             `${JSON.stringify(offPage, null, 2)}`,
         );
       const structuredContent = checked(checkRedactionOutputSchema, {
+        scanComplete: completeness.complete,
         clean: false,
         totalFindings: total,
         byKind,
@@ -1592,6 +2008,7 @@ server.registerTool(
         survivors: survivors.map(toOutputRegion),
         offPage: offPage.map((f: any) => ({ source: f.source, kind: f.kind, preview: f.preview })),
         coverage,
+        verdict,
         ...(meter ? { evaluation: true as const } : {}),
       });
       return {
@@ -1599,9 +2016,10 @@ server.registerTool(
           {
             type: "text",
             text:
-              (meter ? `${evaluationBanner(meter)}\n\n` : "") +
+              lead +
               `⚠️ LEAK: this "redacted" PDF still contains ${total} sensitive item(s) (${tally}) — ` +
               `the redaction did not actually remove the data.\n\n` +
+              `${verdictHeading(verdict)}\n\n` +
               `${parts.join("\n\n")}\n\n` +
               `${scope}\n\n` +
               `Previews are masked; the raw values stayed on-device. To actually remove this data ` +
@@ -1635,9 +2053,11 @@ server.registerTool(
       "raw text for genuine content review and understand the raw PII values will then " +
       "appear verbatim in this response and in your context — that is the explicit, " +
       "documented opt-in this tool requires; the default is always masked. A page " +
-      "whose content stream could not be read (corrupt or size-capped) reports " +
-      "'contentDecoded: false' with empty text rather than being silently skipped or " +
-      "counted as blank. Does NOT render pages to images — text only. Free tier, no " +
+      "whose text could not be fully read (a corrupt or size-capped content stream, or " +
+      "characters whose meaning the font does not define) reports " +
+      "'contentDecoded: false' rather than being silently skipped or counted as blank; " +
+      "any text that was read is still returned, so treat that page as incomplete, not " +
+      "as the whole page. Does NOT render pages to images — text only. Free tier, no " +
       "licence required; works zero-install via the bundled wasm engine, same as " +
       "find_sensitive_regions/locate_text/check_redaction/verify_redaction — a " +
       "configured native engine (OMITLY_ENGINE_DIR) is preferred when available (also " +

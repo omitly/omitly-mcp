@@ -47,8 +47,17 @@ function markerAuditEntries() {
 function handle(req) {
   log(req.command);
   switch (req.command) {
-    case "find":
-      return { ok: true, count: 1, regions: [markerRegion()] };
+    case "find": {
+      // omitly#1473: scan_complete only when a test asks for it, so the
+      // "engine did not report completeness" path stays reachable too.
+      const sc = process.env.OMITLY_ROUTING_STUB_SCAN_COMPLETE;
+      return {
+        ok: true,
+        ...(sc === "true" || sc === "false" ? { scan_complete: sc === "true" } : {}),
+        count: 1,
+        regions: [markerRegion()],
+      };
+    }
     case "locate_text":
       return { ok: true, count: 1, regions: [markerRegion()] };
     case "redact": {
@@ -111,6 +120,39 @@ function handle(req) {
             spans: [{ kind: "native-stub-marker", start: 0, end: 11 }],
           },
         ],
+      };
+    case "check":
+      // omitly#1267: a verdict the real engine and wasm never give for the
+      // fixture (sample.pdf reads safe_to_send), with a marker summary, so a
+      // test can tell the native `check` was the one reached.
+      return {
+        ok: true,
+        check: {
+          verdict: "needs_review",
+          blocking: true,
+          result: {
+            state: "needs_review",
+            blocking: true,
+            summary: "NATIVE-STUB-VERDICT",
+            pagesTotal: 1,
+            pagesRead: 1,
+            checked: [],
+            notChecked: [],
+            problems: [{ text: "NATIVE-STUB-PROBLEM", pages: [1] }],
+            review: [],
+            information: [],
+            decisions: [],
+            reasons: [],
+            checkedAt: new Date(0).toISOString(),
+            omitlyVersion: "stub",
+            sha256: "0".repeat(64),
+            canWrite: false,
+            sizeBytes: 1,
+            producer: null,
+          },
+          report: null,
+          reason_code: null,
+        },
       };
     default:
       return { ok: false, error: `routing-stub: unhandled command ${req.command}` };

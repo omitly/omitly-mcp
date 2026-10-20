@@ -1,6 +1,42 @@
 /* @ts-self-types="./leakcheck_wasm.d.ts" */
 
 /**
+ * omitly#1267: the Safe to Send verdict for a PDF checked as presented —
+ * the same check, verdict mapping, sections and audit v2 report as the
+ * desktop "Check any PDF" (`omitly_seal::check::free_check`, over
+ * `check_presented`). Returns JSON
+ * `{ verdict: "safe_to_send"|"needs_review"|"cannot_verify", blocking,
+ * result: <CheckResult>, report: <audit v2 report>|null, reason_code }`.
+ *
+ * The three states are verdicts about the CHECK, scoped to what it covers
+ * (`result.checked` / `result.not_checked`), never a statement that the
+ * document is safe. Always returns JSON: a file over
+ * `FREE_CHECK_MAX_BYTES` or a fault in the check is `cannot_verify` with a
+ * fixed `reason_code`, never a throw.
+ * @param {Uint8Array} bytes
+ * @returns {string}
+ */
+function check(bytes) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_export2);
+        const len0 = WASM_VECTOR_LEN;
+        wasm.check(retptr, ptr0, len0);
+        var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
+        var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
+        deferred2_0 = r0;
+        deferred2_1 = r1;
+        return getStringFromWasm0(r0, r1);
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+        wasm.__wbindgen_export3(deferred2_0, deferred2_1, 1);
+    }
+}
+exports.check = check;
+
+/**
  * Engine/version string for the page footer ("scanned locally by Omitly vX").
  * @returns {string}
  */
@@ -17,7 +53,7 @@ function engine_version() {
         return getStringFromWasm0(r0, r1);
     } finally {
         wasm.__wbindgen_add_to_stack_pointer(16);
-        wasm.__wbindgen_export2(deferred1_0, deferred1_1, 1);
+        wasm.__wbindgen_export3(deferred1_0, deferred1_1, 1);
     }
 }
 exports.engine_version = engine_version;
@@ -60,7 +96,7 @@ function extract_text(bytes, masked) {
     let deferred2_1;
     try {
         const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_export3);
+        const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_export2);
         const len0 = WASM_VECTOR_LEN;
         wasm.extract_text(retptr, ptr0, len0, masked);
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
@@ -70,7 +106,7 @@ function extract_text(bytes, masked) {
         return getStringFromWasm0(r0, r1);
     } finally {
         wasm.__wbindgen_add_to_stack_pointer(16);
-        wasm.__wbindgen_export2(deferred2_0, deferred2_1, 1);
+        wasm.__wbindgen_export3(deferred2_0, deferred2_1, 1);
     }
 }
 exports.extract_text = extract_text;
@@ -90,9 +126,9 @@ function locate(bytes, needles_json) {
     let deferred3_1;
     try {
         const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_export3);
+        const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_export2);
         const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(needles_json, wasm.__wbindgen_export3, wasm.__wbindgen_export4);
+        const ptr1 = passStringToWasm0(needles_json, wasm.__wbindgen_export2, wasm.__wbindgen_export4);
         const len1 = WASM_VECTOR_LEN;
         wasm.locate(retptr, ptr0, len0, ptr1, len1);
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
@@ -102,7 +138,7 @@ function locate(bytes, needles_json) {
         return getStringFromWasm0(r0, r1);
     } finally {
         wasm.__wbindgen_add_to_stack_pointer(16);
-        wasm.__wbindgen_export2(deferred3_0, deferred3_1, 1);
+        wasm.__wbindgen_export3(deferred3_0, deferred3_1, 1);
     }
 }
 exports.locate = locate;
@@ -122,7 +158,7 @@ function scan(bytes) {
     let deferred2_1;
     try {
         const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
-        const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_export3);
+        const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_export2);
         const len0 = WASM_VECTOR_LEN;
         wasm.scan(retptr, ptr0, len0);
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
@@ -132,7 +168,7 @@ function scan(bytes) {
         return getStringFromWasm0(r0, r1);
     } finally {
         wasm.__wbindgen_add_to_stack_pointer(16);
-        wasm.__wbindgen_export2(deferred2_0, deferred2_1, 1);
+        wasm.__wbindgen_export3(deferred2_0, deferred2_1, 1);
     }
 }
 exports.scan = scan;
@@ -142,6 +178,10 @@ function __wbg_get_imports() {
         __wbg_getRandomValues_cc7f052a444bb2ce: function() { return handleError(function (arg0, arg1) {
             globalThis.crypto.getRandomValues(getArrayU8FromWasm0(arg0, arg1));
         }, arguments); },
+        __wbg_now_42ff8350889827c0: function() {
+            const ret = Date.now();
+            return ret;
+        },
         __wbindgen_object_drop_ref: function(arg0) {
             takeObject(arg0);
         },
