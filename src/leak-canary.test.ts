@@ -203,6 +203,11 @@ test("redact_pdf: validates outputSchema and leaks nothing", async () => {
     assert.equal(res.isError, undefined);
     assert.equal(redactPdfOutputSchema.safeParse(res.structuredContent).success, true);
     assert.equal(res.structuredContent.regionCount, 1);
+    // omitly#1104: the engine's v2 verdict reaches the typed output and text.
+    assert.equal(res.structuredContent.audit.auditSchema, "omitly.audit/v2");
+    assert.equal(res.structuredContent.audit.userVerdict, "safe_to_send");
+    assert.equal(res.structuredContent.audit.blocking, false);
+    assert.ok(res.content[0].text.includes("Result: Safe to Send"), res.content[0].text);
     assertNoLeak("redact_pdf", res);
   });
 });

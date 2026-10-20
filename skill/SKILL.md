@@ -39,12 +39,13 @@ removes the underlying bytes and independently verifies each region is empty.
 
 - **"Has this sealed file been altered since it was sealed?"** → `verify_seal`
   (free, requires a native engine — no wasm fallback exists for this one).
-  Checks the embedded audit report + Ed25519 seal, not redaction completeness —
+  Checks the embedded audit report + whole-file seal (v1: Ed25519; v2: ML-DSA-87
+  with ECDSA P-384), not redaction completeness —
   that's `verify_redaction`'s job. A `seal_unsupported_version` verdict means
   the verifier is too old to check; report that plainly as indeterminate, never
   as a pass or a fail.
-  **A valid seal is INTEGRITY, not IDENTITY.** The signing key is per-install
-  and travels inside the file, so `verdict: "verified"` means "unchanged since
+  **A valid seal is INTEGRITY, not IDENTITY.** The signing key (per-install,
+  or one-time for a single output) travels inside the file, so `verdict: "verified"` means "unchanged since
   sealed by whoever holds this key" — never "produced by Omitly" or "genuine".
   Report it that way, and point the user at `sealFingerprint` for out-of-band
   comparison if they care about origin.

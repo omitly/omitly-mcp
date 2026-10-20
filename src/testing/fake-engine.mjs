@@ -160,6 +160,14 @@ function handle(req) {
           license: "licensed",
           licensedTo: null,
           disclosures: [],
+          // omitly#1104: the real engine's v2 fields (crates/omitly-cli
+          // `publish_v2`), fixed strings only.
+          auditSchema: "omitly.audit/v2",
+          userVerdict: "safe_to_send",
+          blocking: false,
+          auditV2Overall: "pass",
+          result: { state: "safe_to_send", blocking: false },
+          sealFingerprint: "00:11:22:33",
         },
       };
     }
@@ -181,6 +189,8 @@ function handle(req) {
           { class: "hidden-layers", verification: { result: "pass" } },
           { class: "comment-annotations", verification: { result: "pass" } },
           { class: "semantic-text", verification: { result: "pass" } },
+          { class: "labels", verification: { result: "pass" } },
+          { class: "redacted-text-in-strings", verification: { result: "pass" } },
         ],
         disclosures: [],
       };

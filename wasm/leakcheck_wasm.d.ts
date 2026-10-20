@@ -2,6 +2,22 @@
 /* eslint-disable */
 
 /**
+ * omitly#1267: the Safe to Send verdict for a PDF checked as presented —
+ * the same check, verdict mapping, sections and audit v2 report as the
+ * desktop "Check any PDF" (`omitly_seal::check::free_check`, over
+ * `check_presented`). Returns JSON
+ * `{ verdict: "safe_to_send"|"needs_review"|"cannot_verify", blocking,
+ * result: <CheckResult>, report: <audit v2 report>|null, reason_code }`.
+ *
+ * The three states are verdicts about the CHECK, scoped to what it covers
+ * (`result.checked` / `result.not_checked`), never a statement that the
+ * document is safe. Always returns JSON: a file over
+ * `FREE_CHECK_MAX_BYTES` or a fault in the check is `cannot_verify` with a
+ * fixed `reason_code`, never a throw.
+ */
+export function check(bytes: Uint8Array): string;
+
+/**
  * Engine/version string for the page footer ("scanned locally by Omitly vX").
  */
 export function engine_version(): string;

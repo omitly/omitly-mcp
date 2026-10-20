@@ -2,9 +2,9 @@
   "manifest_version": "0.3",
   "name": "omitly-leak-check",
   "display_name": "Omitly \u2014 Redaction Leak Check (free)",
-  "version": "0.1.16",
+  "version": "0.3.7",
   "description": "Local, offline check for exposed or recoverable sensitive content in PDFs, plus verification of a redacted PDF. Diagnosis only \u2014 nothing is uploaded, nothing is redacted. Actual removal is the licensed Omitly desktop app.",
-  "long_description": "Omitly Redaction Leak Check runs entirely on your machine: it re-extracts the text layer of a PDF (including text hidden under black-box redaction marks, superseded incremental-update revisions, metadata, and form fields) and reports anything that looks like PII \u2014 emails, SSNs, phone numbers, card numbers, and Australian identifiers (TFN/ABN/ACN/Medicare/CRN/IHI/BSB). This is a diagnosis-only tool: it never redacts a file and never issues a certificate. To actually remove sensitive data with a verifiable, offline-checkable proof of removal, use the licensed Omitly desktop app (https://omitly.app).",
+  "long_description": "Omitly Redaction Leak Check runs entirely on your machine: it re-extracts the text layer of a PDF (including text hidden under black-box redaction marks, superseded incremental-update revisions, metadata, and form fields) and reports anything that looks like PII \u2014 emails, SSNs, phone numbers, card numbers, and Australian identifiers (TFN/ABN/ACN/Medicare/CRN/IHI/BSB). This is a diagnosis-only tool: it never redacts a file and never issues a certificate. To actually remove sensitive data with a verifiable, offline-checkable proof of removal, use the licensed Omitly desktop app (https://omitly.app). Free tier: find_sensitive_regions and check_redaction are free but EVALUATION-marked and limited to 10 attempts a month, shared across the two (counted locally; past the cap they return a 'free-cap' refusal); locate_text and verify_redaction are free with no cap.",
   "author": {
     "name": "Innisfallen Pty Ltd",
     "url": "https://omitly.app"
@@ -39,11 +39,11 @@
   "tools": [
     {
       "name": "check_redaction",
-      "description": "Audit an already-redacted PDF on-device and report whether sensitive text still survives underneath the redaction marks, in superseded revisions, metadata, or form fields. Diagnosis only \u2014 never redacts, never issues a certificate. Free tier: EVALUATION-marked reports, monthly cap on free checks (counted locally; past the cap the tool returns a structured 'free-cap' refusal)."
+      "description": "Audit an already-redacted PDF on-device and report whether sensitive text still survives underneath the redaction marks, in superseded revisions, metadata, or form fields. Diagnosis only \u2014 never redacts, never issues a certificate. Also gives a check verdict (Safe to Send, Needs Review or Cannot Verify) from the same presented-document check the Omitly desktop app runs \u2014 a verdict about the check and what it covered, never a statement that the document is safe. Free tier: EVALUATION-marked reports, limited to 10 attempts a month shared with find_sensitive_regions (counted locally; past the cap the tool returns a structured 'free-cap' refusal)."
     },
     {
       "name": "find_sensitive_regions",
-      "description": "Scan a local PDF on-device for candidate PII regions (email/SSN/phone/card plus Australian TFN/ABN/ACN/Medicare/CRN/IHI/BSB) with page and coordinates. Diagnosis only \u2014 does not redact. Free tier: EVALUATION-marked results, monthly cap on free checks (counted locally)."
+      "description": "Scan a local PDF on-device for candidate PII regions (email/SSN/phone/card plus Australian TFN/ABN/ACN/Medicare/CRN/IHI/BSB) with page and coordinates. Diagnosis only \u2014 does not redact. Free tier: EVALUATION-marked results, limited to 10 attempts a month shared with check_redaction (counted locally; past the cap the tool returns a structured 'free-cap' refusal)."
     },
     {
       "name": "locate_text",

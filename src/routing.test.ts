@@ -227,10 +227,19 @@ test("[native] check_redaction routes to the native engine, not wasm", async () 
     assert.equal(res.structuredContent.totalFindings, 1, "must be the stub's marker count, not wasm's real 3");
     assert.deepEqual(Object.keys(res.structuredContent.byKind), ["native-stub-marker"]);
     assert.equal(res.structuredContent.evaluation, undefined, "a native-engine result is never EVALUATION-marked");
+    // omitly#1267: the verdict came from the native `check` (the stub's marker),
+    // not from the bundled wasm (which reads sample.pdf as safe_to_send).
+    assert.equal(res.structuredContent.verdict.verdict, "needs_review");
+    assert.equal(res.structuredContent.verdict.blocking, true);
+    assert.equal(res.structuredContent.verdict.result.summary, "NATIVE-STUB-VERDICT");
+    assert.equal("canWrite" in res.structuredContent.verdict.result, false, "desktop-only field dropped");
   });
   const log = readStubLog(logPath);
-  assert.equal(log.length, 1);
-  assert.equal(log[0].command, "find", "check_redaction drives the same native 'find' command as find_sensitive_regions");
+  assert.deepEqual(
+    log.map((l) => l.command),
+    ["find", "check"],
+    "check_redaction drives the same native 'find' command as find_sensitive_regions, then 'check' for the verdict",
+  );
 });
 
 test("[native] verify_redaction with a sidecar routes to native 'verify' (not 'find', not wasm)", async () => {
@@ -296,6 +305,17 @@ test("[wasm] check_redaction uses wasm and returns the real findings", async () 
     assert.equal(res.structuredContent.totalFindings, 3);
     assert.deepEqual(Object.keys(res.structuredContent.byKind).sort(), REAL_KINDS);
     assert.equal(res.structuredContent.evaluation, true);
+    // omitly#1267: the bundled wasm's `check`. sample.pdf's identifiers are
+    // VISIBLE page text: the pattern findings above flag them, while the
+    // presented check (hidden, covered and recoverable content) passes.
+    const v = res.structuredContent.verdict;
+    assert.equal(v.verdict, "safe_to_send");
+    assert.equal(v.blocking, false);
+    assert.equal(v.reason_code, null);
+    assert.equal("report" in v, false, "the audit v2 report is not a tool output");
+    assert.ok(v.result.checked.length > 0);
+    assert.match(textOf(res), /Check verdict: Safe to Send\./);
+    assert.match(textOf(res), /not a statement that the document is safe/);
   });
 });
 

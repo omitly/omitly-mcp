@@ -44,10 +44,18 @@ const COVERAGE = {
   annotationAppearancesScanned: 0,
   pagesFailedCount: 0,
 };
+/** omitly#1267: the verdict every check_redaction result now carries. */
+const VERDICT = {
+  verdict: "cannot_verify" as const,
+  blocking: false,
+  result: null,
+  reason_code: "check_unavailable" as const,
+};
 const REGION = { page: 0, x: 1, y: 2, width: 3, height: 4, kind: "EMAIL", preview: "\u2022\u2022\u2022@\u2022\u2022\u2022" };
 
 test("checked() returns the parsed value for a payload that satisfies the schema", () => {
   const ok = checked(checkRedactionOutputSchema, {
+    scanComplete: true,
     clean: true,
     totalFindings: 0,
     byKind: {},
@@ -55,6 +63,7 @@ test("checked() returns the parsed value for a payload that satisfies the schema
     survivors: [],
     offPage: [],
     coverage: COVERAGE,
+    verdict: VERDICT,
   });
   assert.equal(ok.clean, true);
   assert.equal(ok.totalFindings, 0);
@@ -64,6 +73,7 @@ test("checked() throws on an undeclared field, and names paths/codes but NOT the
   assert.throws(
     () =>
       checked(checkRedactionOutputSchema, {
+        scanComplete: true,
         clean: false,
         totalFindings: 1,
         byKind: { EMAIL: 1 },
@@ -71,6 +81,7 @@ test("checked() throws on an undeclared field, and names paths/codes but NOT the
         survivors: [],
         offPage: [],
         coverage: COVERAGE,
+        verdict: VERDICT,
         // The regression this whole mechanism exists for.
         rawText: RAW,
       } as z.input<typeof checkRedactionOutputSchema>),
@@ -97,6 +108,7 @@ test("an isError result carrying an undeclared field fails the tool call instead
     },
     async () => {
       const structuredContent = checked(checkRedactionOutputSchema, {
+        scanComplete: true,
         clean: false,
         totalFindings: 1,
         byKind: { EMAIL: 1 },
@@ -104,6 +116,7 @@ test("an isError result carrying an undeclared field fails the tool call instead
         survivors: [],
         offPage: [],
         coverage: COVERAGE,
+        verdict: VERDICT,
         rawText: RAW,
       } as z.input<typeof checkRedactionOutputSchema>);
       return {
