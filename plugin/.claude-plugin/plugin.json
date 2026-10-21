@@ -1,0 +1,23 @@
+{
+  "name": "omitly",
+  "displayName": "Omitly",
+  "version": "0.3.7",
+  "description": "On-device PDF redaction leak check: finds sensitive content that is still exposed or recoverable before a PDF leaves your machine. The PDF never leaves your machine.",
+  "author": {
+    "name": "Omitly",
+    "url": "https://omitly.app"
+  },
+  "homepage": "https://omitly.app/pdf-redaction-mcp/",
+  "repository": "https://github.com/omitly/omitly-mcp",
+  "supportUrl": "https://omitly.app/support/",
+  "privacyPolicyUrl": "https://omitly.app/privacy/",
+  "license": "LicenseRef-Omitly-Proprietary",
+  "icon": "./.claude-plugin/icon.png",
+  "keywords": [
+    "pdf",
+    "redaction",
+    "privacy",
+    "mcp",
+    "leak-check"
+  ]
+}

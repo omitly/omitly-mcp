@@ -1,0 +1,23 @@
+{
+  "name": "omitly",
+  "owner": {
+    "name": "Omitly",
+    "url": "https://omitly.app"
+  },
+  "description": "On-device PDF redaction leak check for Claude: finds sensitive content that is still exposed or recoverable. The PDF never leaves your machine.",
+  "plugins": [
+    {
+      "name": "omitly",
+      "source": "./plugin",
+      "description": "Check a local PDF for sensitive content that is still exposed or recoverable before it leaves the machine. Runs on-device; the PDF never leaves your machine.",
+      "category": "security",
+      "keywords": [
+        "pdf",
+        "redaction",
+        "privacy",
+        "mcp",
+        "leak-check"
+      ]
+    }
+  ]
+}

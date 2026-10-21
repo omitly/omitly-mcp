@@ -78,6 +78,25 @@ across the two, without a native engine (`OMITLY_FREE_CAP` changes the number);
 `create_pdf` and seal verification need the native engine, which is not
 currently distributed outside the source repo (omitly#1405).
 
+## Skill (Claude Code)
+
+The package ships a Claude skill at [`skill/SKILL.md`](./skill/SKILL.md):
+plain instructions that tell Claude when to reach for these tools and how to
+report results — masked values only, and what the free check does and does not
+prove.
+
+Install it for Claude Code (user scope):
+
+```bash
+mkdir -p ~/.claude/skills/omitly-redaction
+curl -fsSL https://raw.githubusercontent.com/omitly/omitly-mcp/main/skill/SKILL.md \
+  -o ~/.claude/skills/omitly-redaction/SKILL.md
+```
+
+A project can instead keep the skill under `.claude/skills/omitly-redaction/`.
+The skill is instructions only; limits and the free cap are enforced by the
+server, not by the skill.
+
 ## Tools
 
 | Tool | What it does |
