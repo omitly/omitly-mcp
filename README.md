@@ -112,6 +112,26 @@ server, not by the skill.
 | `verify_document` | Recipient trust-verification (omitly#113): the same seal/report check as `verify_seal` — not a survivor re-scan — aimed at someone who *received* a PDF from someone else and wants to confirm the file is unchanged since it was sealed (integrity, not identity — see `verify_seal`), without paying or licensing anything. Free, no licence. Currently requires a native engine like `verify_seal` (no wasm seal-verification path yet). |
 | `create_pdf` | Generates a clean PDF from Markdown/HTML on-device, rendered through a real browser engine so it looks printed — instead of writing a throwaway reportlab/LaTeX script. |
 | `check_license` | Reports the current licence or trial state — tier, trial days left, the vendor-signed licensee name, which resolution step supplied the licence, and whether it is bound to this machine. Free, takes no arguments, reads no document, and is re-resolved on every call so buy → save licence → call again works without a restart. **Never returns the device fingerprint or the licence file's contents** — device binding is a yes/no. Requires a native engine: the wasm free tier has no licence concept. |
+| `propose_redactions` | omitly#1643, bring your own AI: proposes regions for a PERSON to accept in the Omitly desktop app. Writes nothing. Requires the desktop app to be running on this computer; on acceptance the desktop removes, verifies and seals, and the record shows a person decided (`human-desktop`). |
+| `get_proposal_status` | Follows a queued proposal: pending, accepted, rejected, applied (with output path and verdict), failed or expired. Free; reads no document. |
+
+### Accept-in-app (omitly#1643)
+
+While the Omitly desktop app is running on the same computer with **Settings → Connect
+your AI → "Accept proposals in Omitly"** on (the default), `redact_pdf` and
+`redact_by_entity` do not run: they return `{ status: "queued", proposalId }` and the
+redaction becomes a **proposal** a person accepts or rejects in the app. On acceptance the
+desktop runs its own verified-removal engine, the survivor scan and the seal, and the
+sealed record says a person decided (`human-desktop`); this path needs no native engine
+on the agent's side. `propose_redactions` is the explicit form of the same thing;
+`get_proposal_status` follows the outcome; the person picks the output path in Omitly's own
+save dialog (`outputPath` is kept as the client's suggestion). Needs an omitly-mcp release that
+knows the channel — an older server writes directly. With no desktop running (or the toggle off),
+the write tools behave exactly as before and the record says `mcp-agent` (not
+human-reviewed). The two sides talk through files under the state directory
+(`OMITLY_STATE_DIR`, else `~/.omitly`: `desktop.json`, `proposals/`, `clients/`) — no
+socket, no network. The PDF and the engine stay on this computer; text a client asks for
+(for example `extract_pdf_text`) goes to wherever that client's model runs.
 
 ## PDF generation (`create_pdf`)
 

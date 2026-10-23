@@ -1,7 +1,7 @@
 {
   "name": "omitly",
   "displayName": "Omitly",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "description": "On-device PDF redaction leak check: finds sensitive content that is still exposed or recoverable before a PDF leaves your machine. The PDF never leaves your machine.",
   "author": {
     "name": "Omitly",

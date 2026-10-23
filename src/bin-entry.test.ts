@@ -42,6 +42,8 @@ const EXPECTED_TOOLS = [
   "create_pdf",
   "check_redaction",
   "check_license",
+  "propose_redactions",
+  "get_proposal_status",
 ];
 
 interface Handshake {

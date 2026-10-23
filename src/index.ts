@@ -50,6 +50,15 @@ import {
   recordFreeCheck,
   type FreeCheckOutcome,
 } from "./usage.js";
+import {
+  acceptInApp,
+  enqueueProposal,
+  readDesktopPresence,
+  readProposal,
+  startClientHeartbeat,
+  type ProposalClient,
+  type ProposalTool,
+} from "./desktop.js";
 
 /**
  * WASM fallback for five detection/verify/extract tools — bundled in the npm
@@ -419,8 +428,9 @@ function resultLine(audit: ReturnType<typeof toOutputAudit>): string {
     : `Result: ${userVerdictLabel(audit.userVerdict, audit.blocking)}\n`;
 }
 
-export const redactByEntityOutputSchema = z
+export const redactByEntityDoneSchema = z
   .object({
+    status: z.literal("done"),
     output: z.string().nullable(),
     redactedCount: z.number().int().min(0),
     redacted: z.array(
@@ -431,12 +441,81 @@ export const redactByEntityOutputSchema = z
   })
   .strict();
 
-export const redactPdfOutputSchema = z
+export const redactPdfDoneSchema = z
   .object({
+    status: z.literal("done"),
     output: z.string(),
     regionCount: z.number().int().min(1),
     verdict: z.enum(["pass", "fail"]),
     audit: auditOutputSchema,
+  })
+  .strict();
+
+/**
+ * omitly#1643 — accept-in-app. While the Omitly desktop app is running with
+ * "Accept proposals in Omitly" on, a redaction write does NOT run: it is queued
+ * as a proposal for a person to accept in the app, and this is what the tool
+ * returns instead of an audit. Nothing has been written. The desktop then runs
+ * the verified-removal core itself and the sealed record says `human-desktop`.
+ */
+export const queuedProposalOutputSchema = z
+  .object({
+    status: z.literal("queued"),
+    proposalId: z.string(),
+    tool: z.enum(["redact_pdf", "redact_by_entity"]),
+    client: z.object({ name: z.string(), version: z.string() }).strict(),
+    pdfPath: z.string(),
+    note: z.string(),
+  })
+  .strict();
+
+/**
+ * The SDK registers an OBJECT schema per tool (no unions), so the two write
+ * tools declare this superset: `status` says which shape the rest is. Every
+ * result is still built through `checked()` against the strict shape for its
+ * status (`*DoneSchema` or `queuedProposalOutputSchema`) before it leaves.
+ */
+const queuedFields = {
+  tool: z.enum(["redact_pdf", "redact_by_entity"]).optional(),
+  proposalId: z.string().optional(),
+  client: z.object({ name: z.string(), version: z.string() }).strict().optional(),
+  pdfPath: z.string().optional(),
+  note: z.string().optional(),
+};
+export const redactByEntityOutputSchema = z
+  .object({
+    status: z.enum(["done", "queued"]),
+    output: z.string().nullable().optional(),
+    redactedCount: z.number().int().min(0).optional(),
+    redacted: z
+      .array(z.object({ page: z.number().int(), kind: z.string(), preview: z.string() }).strict())
+      .optional(),
+    verdict: z.enum(["pass", "fail"]).nullable().optional(),
+    audit: auditOutputSchema.nullable().optional(),
+    ...queuedFields,
+  })
+  .strict();
+export const redactPdfOutputSchema = z
+  .object({
+    status: z.enum(["done", "queued"]),
+    output: z.string().optional(),
+    regionCount: z.number().int().min(1).optional(),
+    verdict: z.enum(["pass", "fail"]).optional(),
+    audit: auditOutputSchema.optional(),
+    ...queuedFields,
+  })
+  .strict();
+
+export const proposalStatusOutputSchema = z
+  .object({
+    proposalId: z.string(),
+    status: z.enum(["pending", "accepted", "rejected", "applied", "failed", "expired"]),
+    tool: z.enum(["redact_pdf", "redact_by_entity"]),
+    createdAt: z.string(),
+    resolvedAt: z.string().nullable(),
+    output: z.string().nullable(),
+    verdict: z.string().nullable(),
+    note: z.string().nullable(),
   })
   .strict();
 
@@ -1146,6 +1225,55 @@ function extractTextViaEngineOrWasm(
  * `isMainModule` guard at the bottom of this file.
  */
 export function registerTools(server: McpServer): void {
+  // omitly#1643: the initialize `clientInfo` — who is proposing. Recorded in
+  // the proposal file and the desktop's LOCAL run log only, never in a seal.
+  const clientOf = (): ProposalClient => {
+    const c = server.server.getClientVersion();
+    return c ? { name: c.name, version: c.version } : { name: "unknown MCP client", version: "" };
+  };
+
+  /** Queue a redaction write as a proposal when the desktop is present with
+   *  accept-in-app on. Returns the tool result to send, or null to run the
+   *  engine as before. Paths are already confined by the caller. */
+  function maybeQueue(
+    tool: ProposalTool,
+    input: { pdfPath: string; outputPath: string; regions?: unknown; kinds?: string[] },
+  ) {
+    if (!acceptInApp()) return null;
+    const proposal = enqueueProposal({
+      client: clientOf(),
+      tool,
+      pdfPath: input.pdfPath,
+      outputPath: input.outputPath,
+      ...(Array.isArray(input.regions) ? { regions: input.regions as any } : {}),
+      ...(input.kinds ? { kinds: input.kinds } : {}),
+    });
+    const structuredContent = checked(queuedProposalOutputSchema, {
+      status: "queued",
+      proposalId: proposal.id,
+      tool,
+      client: proposal.client,
+      pdfPath: proposal.pdfPath,
+      note:
+        "Queued for a person to accept in the Omitly desktop app (accept-in-app is on). " +
+        "Nothing has been written. Poll get_proposal_status with this proposalId. The " +
+        "person chooses the real output path in Omitly's save dialog; outputPath is kept as your suggestion.",
+    });
+    return {
+      structuredContent,
+      content: [
+        {
+          type: "text" as const,
+          text:
+            `Proposal ${proposal.id} queued in Omitly for ${tool} on ${proposal.pdfPath}. ` +
+            `Nothing has been written: a person must accept it in the Omitly desktop app, which then ` +
+            `removes, verifies and seals (the record will show a person decided). ` +
+            `Call get_proposal_status with proposalId "${proposal.id}" to follow it.`,
+        },
+      ],
+    };
+  }
+
 server.registerTool(
   "find_sensitive_regions",
   {
@@ -1313,6 +1441,12 @@ server.registerTool(
   },
   async ({ pdfPath, outputPath, kinds, regions, drawBox }) => {
     try {
+      const queuedByEntity = maybeQueue("redact_by_entity", {
+        pdfPath: confineInput(pdfPath, ROOT),
+        outputPath: confineOutput(outputPath, ROOT),
+        kinds,
+      });
+      if (queuedByEntity) return queuedByEntity;
       const res = await runEngine({
         command: "redact_entities",
         pdfPath: confineInput(pdfPath, ROOT),
@@ -1334,7 +1468,8 @@ server.registerTool(
       }
       const redacted = res.redacted ?? [];
       if (redacted.length === 0) {
-        const structuredContent = checked(redactByEntityOutputSchema, {
+        const structuredContent = checked(redactByEntityDoneSchema, {
+          status: "done",
           output: null,
           redactedCount: 0,
           redacted: [],
@@ -1348,7 +1483,8 @@ server.registerTool(
       }
       const audit = toOutputAudit(res.audit);
       const redactedOut = redacted.map((r: any) => ({ page: r.page, kind: r.kind, preview: r.preview }));
-      const structuredContent = checked(redactByEntityOutputSchema, {
+      const structuredContent = checked(redactByEntityDoneSchema, {
+          status: "done",
         output: res.output,
         redactedCount: redactedOut.length,
         redacted: redactedOut,
@@ -1396,6 +1532,12 @@ server.registerTool(
   },
   async ({ pdfPath, outputPath, regions }) => {
     try {
+      const queuedPdf = maybeQueue("redact_pdf", {
+        pdfPath: confineInput(pdfPath, ROOT),
+        outputPath: confineOutput(outputPath, ROOT),
+        regions,
+      });
+      if (queuedPdf) return queuedPdf;
       const res = await runEngine({
         command: "redact",
         pdfPath: confineInput(pdfPath, ROOT),
@@ -1411,7 +1553,8 @@ server.registerTool(
         };
       }
       const audit = toOutputAudit(res.audit);
-      const structuredContent = checked(redactPdfOutputSchema, {
+      const structuredContent = checked(redactPdfDoneSchema, {
+        status: "done",
         output: res.output,
         regionCount: regions.length,
         verdict: audit.verdict,
@@ -2123,13 +2266,165 @@ server.registerTool(
     }
   },
 );
+
+server.registerTool(
+  "propose_redactions",
+  {
+    description:
+      "Propose regions to redact for a PERSON to accept in the Omitly desktop app " +
+      "(omitly#1643, bring your own AI). The explicit, preferred form for agents " +
+      "working alongside a lawyer: nothing is written by this call. The desktop " +
+      "app shows the proposal, the person accepts or rejects, and on acceptance " +
+      "Omitly removes the content, verifies nothing survives and seals the output " +
+      "with a record that a person decided. Requires the Omitly desktop app to be " +
+      "running on this computer; use get_proposal_status to follow the outcome. " +
+      "Same inputs as redact_pdf. Nothing is uploaded.",
+    inputSchema: {
+      pdfPath: z.string().describe("absolute path to the source PDF"),
+      outputPath: z.string().describe("your suggested path for the redacted PDF; the person picks the real one in Omitly's save dialog"),
+      regions: z.array(regionSchema).min(1).describe("regions proposed for removal"),
+    },
+    outputSchema: queuedProposalOutputSchema,
+  },
+  async ({ pdfPath, outputPath, regions }) => {
+    try {
+      const presence = readDesktopPresence();
+      if (!presence) {
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                "The Omitly desktop app is not running on this computer, so there is nobody to " +
+                "accept a proposal. Open Omitly (Settings → Connect your AI) and try again, or — " +
+                "for a headless pipeline with its own engine — call redact_pdf directly, which is " +
+                "recorded as an agent decision, not a human-reviewed one.",
+            },
+          ],
+          isError: true,
+        };
+      }
+      if (!presence.accept_in_app) {
+        return {
+          content: [
+            {
+              type: "text",
+              text:
+                "Omitly is running but \"Accept proposals in Omitly\" is switched off in " +
+                "Settings → Connect your AI, so proposals cannot be queued. Ask the person to " +
+                "switch it on, or call redact_pdf for a direct, agent-decided write.",
+            },
+          ],
+          isError: true,
+        };
+      }
+      const proposal = enqueueProposal({
+        client: clientOf(),
+        tool: "redact_pdf",
+        pdfPath: confineInput(pdfPath, ROOT),
+        outputPath: confineOutput(outputPath, ROOT),
+        regions,
+      });
+      const structuredContent = checked(queuedProposalOutputSchema, {
+        status: "queued",
+        proposalId: proposal.id,
+        tool: "redact_pdf",
+        client: proposal.client,
+        pdfPath: proposal.pdfPath,
+        note: "Queued for a person to accept in the Omitly desktop app. Nothing has been written.",
+      });
+      return {
+        structuredContent,
+        content: [
+          {
+            type: "text",
+            text:
+              `Proposal ${proposal.id} queued in Omitly (${regions.length} region(s) on ${proposal.pdfPath}). ` +
+              `Nothing has been written until a person accepts it. Follow it with get_proposal_status.`,
+          },
+        ],
+      };
+    } catch (e) {
+      return {
+        content: [{ type: "text", text: `Could not queue the proposal: ${(e as Error).message}` }],
+        isError: true,
+      };
+    }
+  },
+);
+
+server.registerTool(
+  "get_proposal_status",
+  {
+    description:
+      "Report what happened to a proposal queued by propose_redactions (or by " +
+      "redact_pdf / redact_by_entity while accept-in-app was on): pending, " +
+      "accepted, rejected, applied (removed, verified and sealed by the desktop " +
+      "app, with the output path and verdict), failed, or expired. Free; reads " +
+      "no document.",
+    inputSchema: {
+      proposalId: z.string().describe("the proposalId returned when the proposal was queued"),
+    },
+    outputSchema: proposalStatusOutputSchema,
+  },
+  async ({ proposalId }) => {
+    try {
+    const p = readProposal(proposalId);
+    if (!p) {
+      return {
+        content: [{ type: "text", text: "No proposal with that id (ids are 24 hex characters; resolved proposals are swept after a day, pending ones expire after seven)." }],
+        isError: true,
+      };
+    }
+    const structuredContent = checked(proposalStatusOutputSchema, {
+      proposalId: p.id,
+      status: p.status,
+      tool: p.tool,
+      createdAt: p.created_at,
+      resolvedAt: p.resolved_at ?? null,
+      output: p.output ?? null,
+      verdict: p.verdict ?? null,
+      note: p.note ?? null,
+    });
+    const line =
+      p.status === "applied"
+        ? `Applied: a person accepted it in Omitly; removed, verified and sealed → ${p.output ?? "(output path not recorded)"} (verdict ${p.verdict ?? "n/a"}).`
+        : p.status === "pending"
+          ? "Pending: waiting for a person to accept or reject it in the Omitly desktop app."
+          : `${p.status[0].toUpperCase()}${p.status.slice(1)}${p.note ? `: ${p.note}` : "."}`;
+    return { structuredContent, content: [{ type: "text", text: `Proposal ${p.id} — ${line}` }] };
+    } catch (e) {
+      return {
+        content: [{ type: "text", text: `Could not read the proposal: ${(e as Error).message}` }],
+        isError: true,
+      };
+    }
+  },
+);
 } // end registerTools
 
-/** Create a fresh `McpServer` with all 10 tools registered — used by both the
+/** Create a fresh `McpServer` with every tool registered — used by both the
  *  bin entry below and tests. */
 export function createServer(): McpServer {
   const server = new McpServer({ name: "omitly-mcp", version: VERSION });
   registerTools(server);
+  // omitly#1642: tell the desktop app which client is connected (Connect your
+  // AI → "Connected clients"). Written on initialize and refreshed on a timer;
+  // cleared on close. Best effort — never affects a tool call.
+  const heartbeat = startClientHeartbeat(() => {
+    const c = server.server.getClientVersion();
+    return c ? { name: c.name, version: c.version } : undefined;
+  });
+  const prevInit = server.server.oninitialized;
+  server.server.oninitialized = () => {
+    prevInit?.();
+    heartbeat.tick();
+  };
+  const prevClose = server.server.onclose;
+  server.server.onclose = () => {
+    heartbeat.stop();
+    prevClose?.();
+  };
   return server;
 }
 

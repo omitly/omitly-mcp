@@ -56,6 +56,9 @@ function assertNoLeak(label: string, response: unknown, excluded: string[] = [])
 // since ENGINE_BIN/PDF_BIN/ROOT are resolved at module load. ---
 const root = realpathSync(mkdtempSync(path.join(tmpdir(), "omitly-mcp-canary-")));
 process.env.OMITLY_ALLOWED_DIR = root;
+// omitly#1642: the server writes client heartbeats (and, with a desktop
+// present, proposals) under the state dir — keep a test away from ~/.omitly.
+process.env.OMITLY_STATE_DIR = path.join(root, "state");
 process.env.OMITLY_REDACT_BIN = FAKE_ENGINE;
 process.env.OMITLY_PDF_BIN = FAKE_ENGINE;
 process.env.FAKE_ENGINE_CANARY_EMAIL = CANARY_EMAIL;
@@ -80,8 +83,8 @@ const {
   findSensitiveRegionsOutputSchema,
   locateTextOutputSchema,
   extractPdfTextOutputSchema,
-  redactByEntityOutputSchema,
-  redactPdfOutputSchema,
+  redactByEntityDoneSchema,
+  redactPdfDoneSchema,
   verifyRedactionOutputSchema,
   verifySealOutputSchema,
   createPdfOutputSchema,
@@ -182,7 +185,7 @@ test("redact_by_entity: validates outputSchema and leaks nothing", async () => {
       arguments: { pdfPath: docPath, outputPath },
     });
     assert.equal(res.isError, undefined);
-    assert.equal(redactByEntityOutputSchema.safeParse(res.structuredContent).success, true);
+    assert.equal(redactByEntityDoneSchema.safeParse(res.structuredContent).success, true);
     assert.equal(res.structuredContent.redactedCount, 3);
     assert.equal(res.structuredContent.verdict, "pass");
     assertNoLeak("redact_by_entity", res);
@@ -201,7 +204,7 @@ test("redact_pdf: validates outputSchema and leaks nothing", async () => {
       },
     });
     assert.equal(res.isError, undefined);
-    assert.equal(redactPdfOutputSchema.safeParse(res.structuredContent).success, true);
+    assert.equal(redactPdfDoneSchema.safeParse(res.structuredContent).success, true);
     assert.equal(res.structuredContent.regionCount, 1);
     // omitly#1104: the engine's v2 verdict reaches the typed output and text.
     assert.equal(res.structuredContent.audit.auditSchema, "omitly.audit/v2");
