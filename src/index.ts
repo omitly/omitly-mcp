@@ -40,6 +40,7 @@ import {
   DECISION_CHANNELS,
   normalizeSealResult,
   SEAL_REMOVED_SUMMARY,
+  sealEraLine,
   SEAL_VERDICTS,
   type DecisionChannel,
   type NormalizedSealResult,
@@ -422,6 +423,35 @@ function auditVerdict(a: any): {
 
 /** omitly#1104: the "Result:" line of a redaction's text output, for a v2
  *  output only. */
+// omitly#676: the legacy pass/fail word is `overall == pass`, so for a v2
+// report it reads "fail" beside "Result: Needs Review". Print it only for a
+// v1 report, which has no user verdict; the Result line speaks for v2.
+function verificationLine(verdict: unknown, audit: ReturnType<typeof toOutputAudit>): string {
+  if (audit.userVerdict !== null) return "";
+  return `Verification: ${typeof verdict === "string" ? verdict : "see audit log"}\n`;
+}
+
+// omitly#676: what the desktop records as a proposal's verdict — the v2
+// user verdict (`safe_to_send` / `needs_review` / `cannot_verify`), or a v1
+// `pass` / `fail`. The file is written by another process, so only known
+// values get a label; anything else reads as not recorded.
+export function proposalVerdictLabel(verdict: unknown): string {
+  switch (verdict) {
+    case "safe_to_send":
+      return "Safe to Send";
+    case "needs_review":
+      return "Needs Review";
+    case "cannot_verify":
+      return "Cannot Verify";
+    case "pass":
+      return "verified (legacy report)";
+    case "fail":
+      return "not fully verified (legacy report)";
+    default:
+      return "not recorded";
+  }
+}
+
 function resultLine(audit: ReturnType<typeof toOutputAudit>): string {
   return audit.userVerdict === null
     ? ""
@@ -651,7 +681,12 @@ const licenseProvenanceOutputSchema = z
   .object({
     valid: z.boolean(),
     licenseId: z.string(),
-    licensedTo: z.string(),
+    // omitly#446: buyer-asserted, never an identity claim.
+    licensedTo: z
+      .string()
+      .describe(
+        "The name the buyer entered at checkout. The vendor licence chain signs it, but Omitly does not verify who the buyer is: report it as the name given by the buyer, never as a verified identity.",
+      ),
     product: z.string(),
     reason: z.string().nullable(),
   })
@@ -690,6 +725,9 @@ export const verifySealOutputSchema = z
     sealVersion: z.string().nullable(),
     carriesAuditReport: z.boolean().nullable(),
     sealFingerprint: z.string().nullable(),
+    /** omitly#1588 (SEAL-SPEC-v2 §11.1): "classical-era seal (v1)" for a v1
+     *  seal, whatever its verdict; null otherwise. */
+    sealEraLabel: z.string().nullable(),
     allPassed: z.boolean().nullable(),
     metadataScrubbed: z.boolean().nullable(),
     /** omitly#228: who decided the redactions this seal covers — engine-gated
@@ -723,6 +761,7 @@ function toOutputSeal(res: NormalizedSealResult) {
     sealVersion: res.sealVersion,
     carriesAuditReport: res.carriesAuditReport,
     sealFingerprint: res.sealFingerprint,
+    sealEraLabel: res.sealEraLabel,
     allPassed: res.allPassed,
     metadataScrubbed: res.metadataScrubbed,
     decisionChannel: res.decisionChannel,
@@ -1497,7 +1536,7 @@ server.registerTool(
             type: "text",
             text:
               `Redacted ${redacted.length} entit${redacted.length === 1 ? "y" : "ies"} → ${res.output}\n` +
-              `Verification: ${res.audit?.verdict ?? "see audit log"}\n` +
+              verificationLine(res.audit?.verdict, audit) +
               resultLine(audit) +
               `\n` +
               `Removed:\n${JSON.stringify(redacted, null, 2)}\n\n` +
@@ -1567,7 +1606,7 @@ server.registerTool(
             type: "text",
             text:
               `Redacted ${regions.length} region(s) → ${res.output}\n` +
-              `Verification: ${res.audit?.verdict ?? "see audit log"}\n` +
+              verificationLine(res.audit?.verdict, audit) +
               resultLine(audit) +
               `\n` +
               `Audit log:\n${JSON.stringify(res.audit, null, 2)}`,
@@ -1856,7 +1895,7 @@ server.registerTool(
             `out-of-band against what the sender published if you need to know who sealed it.`
           : `⚠️ Seal verdict: ${res.verdict} — do not treat this file's audit trail as trustworthy.`;
       return {
-        content: [{ type: "text", text: `${summary}\n\n${JSON.stringify(res, null, 2)}` }],
+        content: [{ type: "text", text: `${summary}${sealEraLine(res)}\n\n${JSON.stringify(res, null, 2)}` }],
         structuredContent,
         isError: isSealError(res),
       };
@@ -1945,7 +1984,7 @@ server.registerTool(
               `by (or the report was stripped from) this pipeline.`
             : `⚠️ Seal verdict: ${res.verdict} — do not treat this file's audit trail as trustworthy.`;
       return {
-        content: [{ type: "text", text: `${summary}\n\n${JSON.stringify(res, null, 2)}` }],
+        content: [{ type: "text", text: `${summary}${sealEraLine(res)}\n\n${JSON.stringify(res, null, 2)}` }],
         structuredContent,
         isError: isSealError(res),
       };
@@ -2388,7 +2427,7 @@ server.registerTool(
     });
     const line =
       p.status === "applied"
-        ? `Applied: a person accepted it in Omitly; removed, verified and sealed → ${p.output ?? "(output path not recorded)"} (verdict ${p.verdict ?? "n/a"}).`
+        ? `Applied: a person accepted it in Omitly; redacted and sealed → ${p.output ?? "(output path not recorded)"}. Result: ${proposalVerdictLabel(p.verdict)}.`
         : p.status === "pending"
           ? "Pending: waiting for a person to accept or reject it in the Omitly desktop app."
           : `${p.status[0].toUpperCase()}${p.status.slice(1)}${p.note ? `: ${p.note}` : "."}`;

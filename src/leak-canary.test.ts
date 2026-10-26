@@ -263,6 +263,9 @@ test("verify_seal: validates outputSchema and leaks nothing", async () => {
     assert.equal(verifySealOutputSchema.safeParse(res.structuredContent).success, true);
     assert.equal(res.structuredContent.verdict, "verified");
     assert.equal(res.structuredContent.sealValid, true);
+    // omitly#1588: the v1 label is in the structured result AND the text.
+    assert.equal(res.structuredContent.sealEraLabel, "classical-era seal (v1)");
+    assert.match(res.content[0].text, /Seal format: classical-era seal \(v1\)/);
     assertNoLeak("verify_seal", res);
   });
 });
@@ -279,6 +282,9 @@ test("verify_document: validates outputSchema and leaks nothing", async () => {
     assert.equal(verifySealOutputSchema.safeParse(res.structuredContent).success, true);
     assert.equal(res.structuredContent.verdict, "verified");
     assert.equal(res.structuredContent.sealValid, true);
+    // omitly#1588: the v1 label is in the structured result AND the text.
+    assert.equal(res.structuredContent.sealEraLabel, "classical-era seal (v1)");
+    assert.match(res.content[0].text, /Seal format: classical-era seal \(v1\)/);
     assertNoLeak("verify_document", res);
   });
 });

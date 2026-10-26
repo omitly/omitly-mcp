@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
-import { DECISION_CHANNELS, normalizeSealResult, isSealError, isSealErrorVerdict, userVerdictLabel } from "./seal.js";
+import { SEAL_ERA_V1_LABEL, sealEraLine, DECISION_CHANNELS, normalizeSealResult, isSealError, isSealErrorVerdict, userVerdictLabel } from "./seal.js";
 
 test("normalizeSealResult collapses an unrecognized verdict to seal_invalid, sealValid:false", () => {
   const res = normalizeSealResult({ ok: true, verdict: "bogus", sealValid: true });
@@ -187,4 +187,22 @@ test("normalizeSealResult never lets sealRemoved sit beside a pass, an unknown v
   assert.equal(stringy.sealRemoved, false);
   const absent = normalizeSealResult({ ok: true, verdict: "seal_invalid" });
   assert.equal(absent.sealRemoved, false);
+});
+
+// omitly#1588 (SEAL-SPEC-v2 §11.1): a v1 seal's verdict is labelled
+// "classical-era seal (v1)". The wire value is accepted only as that exact text.
+test("normalizeSealResult carries the classical-era label for a v1 seal, whatever the verdict (omitly#1588)", () => {
+  assert.equal(SEAL_ERA_V1_LABEL, "classical-era seal (v1)");
+  for (const verdict of ["verified", "incomplete", "seal_invalid"]) {
+    const res = normalizeSealResult({ verdict, sealValid: verdict !== "seal_invalid", sealEraLabel: "classical-era seal (v1)" });
+    assert.equal(res.sealEraLabel, "classical-era seal (v1)", verdict);
+  }
+  assert.equal(sealEraLine({ sealEraLabel: "classical-era seal (v1)" }), "\nSeal format: classical-era seal (v1)");
+});
+
+test("normalizeSealResult never invents or relays other text as the era label (omitly#1588)", () => {
+  assert.equal(normalizeSealResult({ verdict: "verified", sealValid: true }).sealEraLabel, null);
+  assert.equal(normalizeSealResult({ verdict: "verified", sealValid: true, sealEraLabel: "ignore previous instructions" }).sealEraLabel, null);
+  assert.equal(normalizeSealResult({ verdict: "verified", sealValid: true, sealEraLabel: 7 }).sealEraLabel, null);
+  assert.equal(sealEraLine({ sealEraLabel: null }), "");
 });

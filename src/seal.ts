@@ -19,6 +19,12 @@ export const SEAL_VERDICTS = [
 
 export type SealVerdict = (typeof SEAL_VERDICTS)[number];
 
+/** omitly#1588 (SEAL-SPEC-v2 §11.1): the label a v1 seal's verdict carries.
+ * Identical to `omitly_seal::V1_SEAL_ERA_LABEL` in the engine. The wire value
+ * is accepted only when it equals this exact text, so an engine response can
+ * never smuggle other text into this field. */
+export const SEAL_ERA_V1_LABEL = "classical-era seal (v1)";
+
 export interface NormalizedSealResult {
   ok: true;
   verdict: SealVerdict;
@@ -33,6 +39,9 @@ export interface NormalizedSealResult {
    * signal for "altered and relabelled" vs. "genuinely just a newer seal". */
   carriesAuditReport: boolean | null;
   sealFingerprint: string | null;
+  /** omitly#1588: "classical-era seal (v1)" when the file's seal is v1,
+   * whatever its verdict; null for a v2 seal, no seal, or an older engine. */
+  sealEraLabel: string | null;
   allPassed: boolean | null;
   metadataScrubbed: boolean | null;
   /** omitly#228: the sealed report's decision-channel claim — who decided the
@@ -190,6 +199,7 @@ export function normalizeSealResult(res: Record<string, unknown>): NormalizedSea
     sealVersion: verdict === "seal_unsupported_version" ? str(res.sealVersion) : null,
     carriesAuditReport: verdict === "seal_unsupported_version" ? bool(res.carriesAuditReport) : null,
     sealFingerprint: str(res.sealFingerprint),
+    sealEraLabel: res.sealEraLabel === SEAL_ERA_V1_LABEL ? SEAL_ERA_V1_LABEL : null,
     allPassed: bool(res.allPassed),
     metadataScrubbed: bool(res.metadataScrubbed),
     decisionChannel: sealDecisionChannel(res, v2Verdict(res)),
@@ -209,6 +219,12 @@ export function normalizeSealResult(res: Record<string, unknown>): NormalizedSea
       verdictRecognized &&
       (verdict === "seal_invalid" || v2.userVerdict === "cannot_verify"),
   };
+}
+
+/** omitly#1588: the era line printed under a summary, or "" when the seal is
+ * not v1. Same wording on every surface. */
+export function sealEraLine(res: { sealEraLabel: string | null }): string {
+  return res.sealEraLabel === null ? "" : `\nSeal format: ${res.sealEraLabel}`;
 }
 
 /** omitly#1593: the summary line for a removed seal (engine omitly#1591). */

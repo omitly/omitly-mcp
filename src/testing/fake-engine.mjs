@@ -237,6 +237,8 @@ function handle(req) {
         verdict: "verified",
         sealValid: true,
         sealFingerprint: "fake-seal-fingerprint-0123456789abcdef",
+        // omitly#1588: the real engine adds this for a v1 seal.
+        sealEraLabel: "classical-era seal (v1)",
         allPassed: true,
         metadataScrubbed: true,
         regionCount: 3,

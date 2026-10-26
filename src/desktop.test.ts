@@ -239,6 +239,13 @@ test("get_proposal_status reflects what the desktop wrote back, and rejects a ba
   assert.equal(sc.status, "applied");
   assert.equal(sc.output, "/b.pdf");
   assert.equal(sc.verdict, "pass");
+  assert.match(textOf(res), /Result: verified \(legacy report\)\./);
+  // omitly#676: a v2 Needs Review outcome reads as Needs Review, never as
+  // "verified" or a bare "fail".
+  writeFileSync(file, JSON.stringify({ ...p, status: "applied", output: "/b.pdf", verdict: "needs_review", resolved_at: new Date().toISOString() }));
+  const review = await withServer(root, stateDir, (client) => client.callTool({ name: "get_proposal_status", arguments: { proposalId: p.id } }));
+  assert.match(textOf(review), /Result: Needs Review\./);
+  assert.doesNotMatch(textOf(review), /verified|verdict fail/);
   const bad = await withServer(root, stateDir, (client) => client.callTool({ name: "get_proposal_status", arguments: { proposalId: "../../etc/passwd" } }));
   assert.equal(bad.isError, true);
 });
