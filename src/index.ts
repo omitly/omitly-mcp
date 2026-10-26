@@ -609,7 +609,7 @@ export const SIDECAR_VERIFY_NOTE =
 /** The line every text surface leads with: the incomplete-scan warning, or an
  *  explicit statement that the scan was complete. Never empty. */
 export function scanStatusLine(res: any): string {
-  return incompleteScanBanner(res) || "✅ Scan complete: all text on every page and in every stream was read. Images are not OCR'd.";
+  return incompleteScanBanner(res) || "✅ Scan complete: all text on every page and in every stream was read. Images are not OCR'd."; // claims-lint:allow -- "complete" describes the text scan; this says images are NOT OCR'd, no recognised-text claim (omitly#1675)
 }
 
 /** A single leak/finding surfaced by `verify_redaction` — never the raw
