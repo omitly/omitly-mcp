@@ -2,7 +2,7 @@
   "mcpServers": {
     "omitly": {
       "command": "npx",
-      "args": ["-y", "omitly-mcp@5.0.1"]
+      "args": ["-y", "omitly-mcp@5.2.0"]
     }
   }
 }
