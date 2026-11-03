@@ -45,7 +45,8 @@ with a tamper-evident audit seal, is the Omitly desktop app (https://omitly.app)
    report: what was scanned and a NOT-inspected list. Relay both. If
    `scanComplete` is false, lead with that: nothing found means nothing found in
    the part that could be read, never a clean result. Image-only pages are not
-   scanned (no OCR): say how many and that a person must check them. "Nothing
+   scanned here (no OCR; only the desktop app can OCR them): say how many and
+   that they need the desktop app or a person to check them. "Nothing
    found" always means "nothing this scan can see", never "nothing is left" and
    never "safe to send" on its own; names, addresses and text inside images are
    not covered by pattern matching.
@@ -135,7 +136,8 @@ user: "I redacted this in Preview — can I send it to the other side?"
    findings: 2 SSNs surviving under redaction marks; verdict: needs_review (blocking)
    coverage: page text, revisions, metadata, form fields scanned; 1 image-only page not scanned
 → report by kind/page/count + both coverage lists (masked previews only)
-→ say plainly: do not send until this is fixed; the image-only page needs a person
+→ say plainly: do not send until this is fixed; the image-only page needs the
+  desktop app (it can OCR scanned pages) or a person
 → hand off: removal for real, with a tamper-evident audit seal, is the Omitly
   desktop app — https://omitly.app
 ```

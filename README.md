@@ -169,6 +169,17 @@ is a first-pass detector (ASCII patterns, per-show-operator matching): treat
 its hits as *candidates for review*, not a completeness guarantee. An LLM can
 always supply additional regions directly.
 
+**Scanned (image-only) pages are desktop-only in Omitly 5.3.** The engine CLI
+(`omitly-redact`) and this server have no OCR path; only the desktop app can
+OCR a scanned page. Both fail closed on an image-only page: `find` reports
+count 0 with `scanComplete: false`, and `redact` comes back `needs_review` /
+`review_required` with a review line saying the page content is an image only,
+so any text there was not read. `check_redaction` can still say `clean: true`
+for such a page, but always with `scanComplete: false` and text that leads with
+"INCOMPLETE SCAN", so it is never reported as a complete scan, and a
+production of scanned documents can only reach an affirmative verdict in the
+desktop app. Engine-side OCR is a later release, not scheduled — not in 5.3.
+
 **Privacy of findings.** This server processes files locally and never uploads
 them. Every tool result, though, is returned to your MCP client, so it enters
 that client's model context and goes wherever the client sends it: "nothing is

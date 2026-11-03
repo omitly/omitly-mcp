@@ -165,6 +165,17 @@ test("normalizeSealResult passes sealRemoved through beside a v2 cannot_verify",
   assert.equal(isSealError(res), true);
 });
 
+// omitly#1701 (owner decision 2026-10-27): a recorded "kept on purpose" decision
+// reads Needs Review, never Safe to Send. The engine decides; this only checks it.
+test("normalizeSealResult: pass_with_operator_decisions is Needs Review, and Safe to Send beside it is refused (omitly#1701)", () => {
+  const base = { ok: true, verdict: "unsupported_schema", auditV2Recognized: true, auditV2Overall: "pass_with_operator_decisions", blocking: false };
+  const review = normalizeSealResult({ ...base, userVerdict: "needs_review" });
+  assert.equal(review.userVerdict, "needs_review");
+  assert.equal(review.auditV2Overall, "pass_with_operator_decisions");
+  const forged = normalizeSealResult({ ...base, userVerdict: "safe_to_send" });
+  assert.equal(forged.userVerdict, "cannot_verify");
+});
+
 test("normalizeSealResult never lets sealRemoved sit beside a pass, an unknown verdict, or a non-boolean", () => {
   const verified = normalizeSealResult({ ok: true, verdict: "verified", sealValid: true, sealRemoved: true });
   assert.equal(verified.sealRemoved, false);

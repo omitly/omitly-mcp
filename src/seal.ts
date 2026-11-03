@@ -129,8 +129,9 @@ export function sealDecisionChannel(
 function expectedVerdict(overall: AuditV2Overall): [UserVerdict, boolean] {
   switch (overall) {
     case "pass":
-    case "pass_with_operator_decisions":
       return ["safe_to_send", false];
+    // omitly#1701: a recorded "kept on purpose" decision is never Safe to Send.
+    case "pass_with_operator_decisions":
     case "review_required":
       return ["needs_review", false];
     case "unsafe":

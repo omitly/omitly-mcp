@@ -702,7 +702,7 @@ const licenseProvenanceOutputSchema = z
  *  failure instead of a silent extra key in a model transcript. */
 export const checkLicenseOutputSchema = z
   .object({
-    state: z.enum(["licensed", "trial", "trial_expired", "invalid"]),
+    state: z.enum(["licensed", "trial", "trial_expired", "updates_lapsed", "invalid"]),
     tier: z.enum(["pro", "personal", "standard"]).nullable(),
     daysLeft: z.number().int().nullable(),
     /** The vendor-SIGNED display name — the one identity field the root attests. */
@@ -1801,6 +1801,8 @@ server.registerTool(
               "Everything works; audit output is marked as evaluation until a licence is activated."
             : res.state === "trial_expired"
               ? "⛔ The 14-day trial has ended. Redaction needs a licence; verification stays free."
+              : res.state === "updates_lapsed"
+              ? `⚠️ Pro updates ended before this build was released: ${res.reason ?? "redaction works, output is marked as evaluation; install an earlier version or renew updates for unmarked output"}`
               : `⚠️ A licence file was found but did not verify: ${res.reason ?? "no reason given"}`;
 
       // §1's renewal rule: surfaced, never silently adopted (omitly#86 owns adoption).
