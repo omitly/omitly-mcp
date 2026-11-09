@@ -125,6 +125,12 @@ let importCounter = 0;
  */
 async function importFresh(env: Partial<Record<(typeof ENGINE_ENV_KEYS)[number], string>>) {
   for (const key of ENGINE_ENV_KEYS) delete process.env[key];
+  // omitly#1786: never fall back to the real ~/.omitly. Without this, a dev
+  // machine running the Omitly desktop app (live desktop.json heartbeat,
+  // accept-in-app on) turned every redact call below into a PROPOSAL in the
+  // user's real inbox — 4 tests failed and `routing-test` proposals landed
+  // in the live Proposals modal pre-selected (the #1682 sighting).
+  process.env.OMITLY_STATE_DIR = mkdtempSync(path.join(tmpdir(), "omitly-routing-state-"));
   for (const [k, v] of Object.entries(env)) process.env[k] = v;
   importCounter += 1;
   const specifier = "./index.js?routing-test-variant=" + importCounter;

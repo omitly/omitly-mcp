@@ -90,7 +90,16 @@ export interface NormalizedSealResult {
    * `seal_invalid` or a v2 `cannot_verify`, so it can never sit next to a
    * pass. False when the engine does not say so (older engines included). */
   sealRemoved: boolean;
+  /** omitly#1792: how the sealing key of a VERIFIED v2 report is scoped, from
+   * the engine's `sealKeyKind`: "one_time" = made for this one output (no
+   * known fingerprint exists to compare it with), "install" = no one-time
+   * marker. null for v1, an unverified report, or an older engine. A label
+   * only: it never feeds a verdict. */
+  sealKeyKind: SealKeyKind | null;
 }
+
+export const SEAL_KEY_KINDS = ["one_time", "install"] as const;
+export type SealKeyKind = (typeof SEAL_KEY_KINDS)[number];
 
 /** omitly#1104: spec §5's overall statuses. */
 export const AUDIT_V2_OVERALLS = [
@@ -215,6 +224,14 @@ export function normalizeSealResult(res: Record<string, unknown>): NormalizedSea
     auditV2Recognized: bool(res.auditV2Recognized) ?? false,
     auditV2ValidationError: str(res.auditV2ValidationError),
     ...v2,
+    // Only beside a v2 report that passed every gate (`auditV2Overall`
+    // non-null) over a valid seal; anything else is no claim.
+    sealKeyKind:
+      v2.auditV2Overall !== null &&
+      verdict !== "seal_invalid" &&
+      SEAL_KEY_KINDS.includes(res.sealKeyKind as SealKeyKind)
+        ? (res.sealKeyKind as SealKeyKind)
+        : null,
     sealRemoved:
       res.sealRemoved === true &&
       verdictRecognized &&
@@ -226,6 +243,14 @@ export function normalizeSealResult(res: Record<string, unknown>): NormalizedSea
  * not v1. Same wording on every surface. */
 export function sealEraLine(res: { sealEraLabel: string | null }): string {
   return res.sealEraLabel === null ? "" : `\nSeal format: ${res.sealEraLabel}`;
+}
+
+/** omitly#1792: the key line printed under a summary, or "" unless the
+ * verified seal key is a one-time key. Same wording on every surface. */
+export function sealKeyLine(res: { sealKeyKind: SealKeyKind | null }): string {
+  return res.sealKeyKind === "one_time"
+    ? "\nSeal key: one-time key — there is no known fingerprint to compare it with."
+    : "";
 }
 
 /** omitly#1593: the summary line for a removed seal (engine omitly#1591). */

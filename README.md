@@ -97,6 +97,11 @@ A project can instead keep the skill under `.claude/skills/omitly-redaction/`.
 The skill is instructions only; limits and the free cap are enforced by the
 server, not by the skill.
 
+**Any other MCP client** (Claude Desktop, Cursor, …) needs no install: the
+server offers the same instructions as the `omitly-redaction` prompt, with an
+optional `pdfPath` argument. Pick it from your client's prompt menu. The
+prompt is read from the shipped `skill/SKILL.md`, so the two never differ.
+
 ## Tools
 
 | Tool | What it does |

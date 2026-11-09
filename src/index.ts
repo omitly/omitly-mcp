@@ -30,7 +30,8 @@ import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import { z } from "zod";
 import { ENGINE_OUTPUT_CAP_BYTES, resolveEngineTimeoutMs } from "./engine-config.js";
-import { allowedRoot, confineInput, confineOutput } from "./paths.js";
+import { allowedRoot, assertSidecarUnchanged, confineInput, confineOutput, confineSidecar } from "./paths.js";
+import { registerSkillPrompt } from "./skill-prompt.js";
 import {
   isSealError,
   userVerdictLabel,
@@ -41,6 +42,8 @@ import {
   normalizeSealResult,
   SEAL_REMOVED_SUMMARY,
   sealEraLine,
+  sealKeyLine,
+  SEAL_KEY_KINDS,
   SEAL_VERDICTS,
   type DecisionChannel,
   type NormalizedSealResult,
@@ -748,6 +751,10 @@ export const verifySealOutputSchema = z
     /** omitly#1593: the file carries a sealed report but no seal at all. A
      *  reason beside a failure verdict, never a verdict itself. */
     sealRemoved: z.boolean(),
+    /** omitly#1792: "one_time" = the verified seal key was made for this one
+     *  output (no known fingerprint to compare it with); "install" = no
+     *  one-time marker; null = v1 / not verified. A label, not a verdict. */
+    sealKeyKind: z.enum(SEAL_KEY_KINDS).nullable(),
   })
   .strict();
 
@@ -777,6 +784,7 @@ function toOutputSeal(res: NormalizedSealResult) {
     userVerdict: res.userVerdict,
     blocking: res.blocking,
     sealRemoved: res.sealRemoved,
+    sealKeyKind: res.sealKeyKind,
   };
 }
 
@@ -1648,9 +1656,26 @@ server.registerTool(
     try {
       const confined = confineInput(pdfPath, ROOT);
       if (ENGINE_BIN) {
-        const hasSidecar = existsSync(`${confined}.audit.json`);
-        if (hasSidecar) {
-          const res = await runEngine({ command: "verify", pdfPath: confined });
+        // #1563: the engine derives `<pdf>.audit.json` itself and follows
+        // symlinks, so vet the sidecar here, before it runs. A link (or any
+        // non-regular entry) is refused with no content; no entry at all falls
+        // through to the re-scan below, as before.
+        const sidecar = confineSidecar(confined, ROOT);
+        if (sidecar) {
+          let res: any;
+          try {
+            res = await runEngine({ command: "verify", pdfPath: confined });
+          } catch (engineError) {
+            // A rejection carries the engine's stderr or non-JSON stdout, which
+            // can hold bytes it read through a swapped-in link. If the sidecar
+            // changed, the refusal replaces the engine's text; if not, the
+            // engine's own error propagates as before.
+            assertSidecarUnchanged(sidecar);
+            throw engineError;
+          }
+          // Withhold everything the engine returned if the sidecar was swapped
+          // for something else while it ran.
+          assertSidecarUnchanged(sidecar);
           if (!res?.ok) {
             return {
               content: [
@@ -1897,7 +1922,7 @@ server.registerTool(
             `out-of-band against what the sender published if you need to know who sealed it.`
           : `⚠️ Seal verdict: ${res.verdict} — do not treat this file's audit trail as trustworthy.`;
       return {
-        content: [{ type: "text", text: `${summary}${sealEraLine(res)}\n\n${JSON.stringify(res, null, 2)}` }],
+        content: [{ type: "text", text: `${summary}${sealEraLine(res)}${sealKeyLine(res)}\n\n${JSON.stringify(res, null, 2)}` }],
         structuredContent,
         isError: isSealError(res),
       };
@@ -1916,7 +1941,7 @@ server.registerTool(
     description:
       "Recipient trust-verification: for someone who RECEIVED a PDF from " +
       "someone else and wants to confirm it's an authentic, unaltered Omitly " +
-      "output — free tier, no licence required. Confirms the embedded audit " +
+      "output — needs the native engine; no licence required. Confirms the embedded audit " +
       "report and whole-file tamper-evidence seal (v1: Ed25519; v2: ML-DSA-87 " +
       "with ECDSA P-384) are valid and unaltered since " +
       "sealing, and reports the seal's own attested verdict — this does not " +
@@ -1986,7 +2011,7 @@ server.registerTool(
               `by (or the report was stripped from) this pipeline.`
             : `⚠️ Seal verdict: ${res.verdict} — do not treat this file's audit trail as trustworthy.`;
       return {
-        content: [{ type: "text", text: `${summary}${sealEraLine(res)}\n\n${JSON.stringify(res, null, 2)}` }],
+        content: [{ type: "text", text: `${summary}${sealEraLine(res)}${sealKeyLine(res)}\n\n${JSON.stringify(res, null, 2)}` }],
         structuredContent,
         isError: isSealError(res),
       };
@@ -2449,6 +2474,9 @@ server.registerTool(
 export function createServer(): McpServer {
   const server = new McpServer({ name: "omitly-mcp", version: VERSION });
   registerTools(server);
+  // omitly#1641: the shipped skill/SKILL.md, offered as a prompt so MCP
+  // clients other than Claude Code (Desktop, Cursor, …) can find it.
+  registerSkillPrompt(server);
   // omitly#1642: tell the desktop app which client is connected (Connect your
   // AI → "Connected clients"). Written on initialize and refreshed on a timer;
   // cleared on close. Best effort — never affects a tool call.

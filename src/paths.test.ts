@@ -3,11 +3,11 @@
  * Hermetic — everything happens under a mkdtemp root.
  */
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, mkdirSync, symlinkSync, writeFileSync, realpathSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { test } from "node:test";
-import { allowedRoot, confineInput, confineOutput } from "./paths.js";
+import { allowedRoot, assertSidecarUnchanged, confineInput, confineOutput, confineSidecar } from "./paths.js";
 
 function makeRoot(): string {
   // realpath because /tmp is a symlink on macOS — the module compares realpaths.
@@ -154,4 +154,90 @@ test("allowedRoot honours OMITLY_ALLOWED_DIR and rejects a missing dir", () => {
     if (prev === undefined) delete process.env.OMITLY_ALLOWED_DIR;
     else process.env.OMITLY_ALLOWED_DIR = prev;
   }
+});
+
+// --- #1563: the DERIVED `<pdf>.audit.json` sidecar the engine reads for verify ---
+
+test("confineSidecar: no entry is null, a regular file is claimed", () => {
+  const root = makeRoot();
+  const pdf = path.join(root, "doc.pdf");
+  writeFileSync(pdf, "%PDF-");
+  assert.equal(confineSidecar(pdf, root), null);
+  writeFileSync(`${pdf}.audit.json`, "[]");
+  const claim = confineSidecar(pdf, root);
+  assert.equal(claim?.path, `${pdf}.audit.json`);
+  assert.doesNotThrow(() => assertSidecarUnchanged(claim!));
+});
+
+test("confineSidecar: a symlink to a file outside the root is refused", () => {
+  const root = makeRoot();
+  const outside = makeRoot();
+  const pdf = path.join(root, "doc.pdf");
+  writeFileSync(pdf, "%PDF-");
+  writeFileSync(path.join(outside, "other.audit.json"), "[]");
+  symlinkSync(path.join(outside, "other.audit.json"), `${pdf}.audit.json`);
+  assert.throws(() => confineSidecar(pdf, root), /refusing to verify against .*symbolic link/);
+});
+
+test("confineSidecar: a symlink to another file INSIDE the root is refused too", () => {
+  const root = makeRoot();
+  const pdf = path.join(root, "doc.pdf");
+  writeFileSync(pdf, "%PDF-");
+  mkdirSync(path.join(root, "matter-b"));
+  writeFileSync(path.join(root, "matter-b", "b.pdf.audit.json"), "[]");
+  symlinkSync(path.join(root, "matter-b", "b.pdf.audit.json"), `${pdf}.audit.json`);
+  assert.throws(() => confineSidecar(pdf, root), /symbolic link/);
+});
+
+test("confineSidecar: a DANGLING symlink is refused, not read as 'no sidecar'", () => {
+  const root = makeRoot();
+  const outside = makeRoot();
+  const pdf = path.join(root, "doc.pdf");
+  writeFileSync(pdf, "%PDF-");
+  symlinkSync(path.join(outside, "not-yet-created.json"), `${pdf}.audit.json`);
+  assert.throws(() => confineSidecar(pdf, root), /symbolic link/);
+});
+
+test("confineSidecar: a directory at the sidecar name is refused", () => {
+  const root = makeRoot();
+  const pdf = path.join(root, "doc.pdf");
+  writeFileSync(pdf, "%PDF-");
+  mkdirSync(`${pdf}.audit.json`);
+  assert.throws(() => confineSidecar(pdf, root), /not a regular file/);
+});
+
+test("confineSidecar: the refusal does not reveal where the link points", () => {
+  const root = makeRoot();
+  const outside = makeRoot();
+  const pdf = path.join(root, "doc.pdf");
+  writeFileSync(pdf, "%PDF-");
+  const target = path.join(outside, "private-matter-name.json");
+  symlinkSync(target, `${pdf}.audit.json`);
+  assert.throws(
+    () => confineSidecar(pdf, root),
+    (e: Error) => !e.message.includes("private-matter-name") && !e.message.includes(outside),
+  );
+});
+
+test("assertSidecarUnchanged: a sidecar swapped for a link after the claim is refused", () => {
+  const root = makeRoot();
+  const outside = makeRoot();
+  const pdf = path.join(root, "doc.pdf");
+  writeFileSync(pdf, "%PDF-");
+  writeFileSync(`${pdf}.audit.json`, "[]");
+  const claim = confineSidecar(pdf, root)!;
+  writeFileSync(path.join(outside, "x.json"), "[]");
+  rmSync(`${pdf}.audit.json`);
+  symlinkSync(path.join(outside, "x.json"), `${pdf}.audit.json`);
+  assert.throws(() => assertSidecarUnchanged(claim), /changed while the engine was reading/);
+});
+
+test("confineOutput: a symlink or dangling link at the output's .audit.json name is refused (existing guard, #661)", () => {
+  const root = makeRoot();
+  const outside = makeRoot();
+  writeFileSync(path.join(outside, "victim.json"), "x");
+  symlinkSync(path.join(outside, "victim.json"), path.join(root, "a.pdf.audit.json"));
+  assert.throws(() => confineOutput(path.join(root, "a.pdf"), root), /refusing to overwrite/);
+  symlinkSync(path.join(outside, "absent.json"), path.join(root, "b.pdf.audit.json"));
+  assert.throws(() => confineOutput(path.join(root, "b.pdf"), root), /refusing to overwrite/);
 });

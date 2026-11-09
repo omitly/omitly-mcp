@@ -18,7 +18,8 @@
 export function check(bytes: Uint8Array): string;
 
 /**
- * Engine/version string for the page footer ("scanned locally by Omitly vX").
+ * Engine/version string for the page footer ("scanned locally by Omitly vX"):
+ * the release this wasm was built for, or `dev` (see `stamped_version`).
  */
 export function engine_version(): string;
 

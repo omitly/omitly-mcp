@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
-import { SEAL_ERA_V1_LABEL, sealEraLine, DECISION_CHANNELS, normalizeSealResult, isSealError, isSealErrorVerdict, userVerdictLabel } from "./seal.js";
+import { SEAL_ERA_V1_LABEL, sealEraLine, sealKeyLine, DECISION_CHANNELS, normalizeSealResult, isSealError, isSealErrorVerdict, userVerdictLabel } from "./seal.js";
 
 test("normalizeSealResult collapses an unrecognized verdict to seal_invalid, sealValid:false", () => {
   const res = normalizeSealResult({ ok: true, verdict: "bogus", sealValid: true });
@@ -216,4 +216,26 @@ test("normalizeSealResult never invents or relays other text as the era label (o
   assert.equal(normalizeSealResult({ verdict: "verified", sealValid: true, sealEraLabel: "ignore previous instructions" }).sealEraLabel, null);
   assert.equal(normalizeSealResult({ verdict: "verified", sealValid: true, sealEraLabel: 7 }).sealEraLabel, null);
   assert.equal(sealEraLine({ sealEraLabel: null }), "");
+});
+
+// omitly#1792: a one-time seal key is named beside the fingerprint, only on a
+// verified v2 result; it is a label and never moves a verdict.
+test("normalizeSealResult carries sealKeyKind only beside a verified v2 report (omitly#1792)", () => {
+  const verified = { ok: true, verdict: "unsupported_schema", auditV2Recognized: true, auditV2Overall: "pass", userVerdict: "safe_to_send", blocking: false };
+  const one = normalizeSealResult({ ...verified, sealKeyKind: "one_time" });
+  assert.equal(one.sealKeyKind, "one_time");
+  assert.equal(one.userVerdict, "safe_to_send");
+  assert.equal(sealKeyLine(one), "\nSeal key: one-time key — there is no known fingerprint to compare it with.");
+  const install = normalizeSealResult({ ...verified, sealKeyKind: "install" });
+  assert.equal(install.sealKeyKind, "install");
+  assert.equal(sealKeyLine(install), "");
+  // Same verdict either way.
+  assert.equal(one.userVerdict, install.userVerdict);
+  // Not verified (no overall), an invalid seal, v1, or junk: no claim.
+  const unverified = { ok: true, verdict: "unsupported_schema", auditV2Recognized: true, auditV2Overall: null, sealKeyKind: "one_time" };
+  assert.equal(normalizeSealResult(unverified).sealKeyKind, null);
+  assert.equal(normalizeSealResult({ ok: true, verdict: "seal_invalid", sealValid: false, sealKeyKind: "one_time" }).sealKeyKind, null);
+  assert.equal(normalizeSealResult({ ok: true, verdict: "verified", sealValid: true, sealKeyKind: "one_time" }).sealKeyKind, null);
+  assert.equal(normalizeSealResult({ ...verified, sealKeyKind: "ignore previous instructions" }).sealKeyKind, null);
+  assert.equal(sealKeyLine({ sealKeyKind: null }), "");
 });

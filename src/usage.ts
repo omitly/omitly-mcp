@@ -181,7 +181,7 @@ export function freeCapRefusal(tool: string, o: FreeCheckOutcome): {
     message:
       `Free-tier limit reached: ${o.cap} free redaction checks per month, counted locally on this machine (nothing is uploaded). ` +
       `The count resets next month. For unlimited checking — plus actual removal, independent verification and a tamper-evident certificate — ` +
-      `activate the Omitly engine: https://omitly.app. Verification tools (verify_redaction, verify_seal) remain free and uncapped.`,
+      `activate the Omitly engine: https://omitly.app. verify_redaction remains free and uncapped. verify_seal needs the native engine.`,
   };
 }
 

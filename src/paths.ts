@@ -16,7 +16,7 @@
  * guardrails against confused-deputy mistakes, not a sandbox for a hostile
  * local user (they own the machine; see docs/THREAT-MODEL.md).
  */
-import { lstatSync, realpathSync } from "node:fs";
+import { lstatSync, realpathSync, type Stats } from "node:fs";
 import * as path from "node:path";
 
 /** Is there a directory ENTRY at `p`? Deliberately `lstat`, not `existsSync`:
@@ -131,4 +131,81 @@ export function confineOutput(p: string, root: string): string {
     }
   }
   return real;
+}
+
+/** The `<pdf>.audit.json` sidecar the engine will read for `verify`, as seen
+ *  at the moment it was confined (#1563). */
+export interface SidecarClaim {
+  /** The sidecar path, exactly as the engine will derive and open it. */
+  path: string;
+  dev: number;
+  ino: number;
+  size: number;
+  mtimeMs: number;
+}
+
+function sidecarRefusal(sidecar: string, why: string): Error {
+  // Deliberately says nothing about where a link points or whether its target
+  // exists: that would turn the refusal into a probe of paths outside the root.
+  return new Error(
+    `refusing to verify against ${sidecar}: ${why}. The audit sidecar must be the ` +
+      `regular file the redaction wrote next to this PDF; remove the link or copy the ` +
+      `real sidecar into place.`,
+  );
+}
+
+function claimOf(sidecar: string, st: Stats): SidecarClaim {
+  return { path: sidecar, dev: st.dev, ino: st.ino, size: st.size, mtimeMs: st.mtimeMs };
+}
+
+/** Validate the DERIVED `<pdf>.audit.json` sidecar before the engine reads it.
+ *
+ *  `confineInput` vets the PDF, but the engine builds the sidecar path itself
+ *  (`format!("{pdf}.audit.json")`) and reads it with `fs::read`, which follows
+ *  symlinks — so a link planted at that name read a file outside the root and
+ *  echoed its reason codes (#1563). `confinedPdf` MUST be `confineInput`'s
+ *  return value, so the sidecar sits in the same realpath'd in-root directory
+ *  and only its final component can differ.
+ *
+ *  Returns null when there is no entry at all (the caller falls back to the
+ *  general re-scan, as before). Returns a claim for a regular file. Refuses
+ *  EVERY other entry, not just a link that leaves the root:
+ *   - A symlink — outside the root, inside it, or dangling. The engine writes a
+ *     sidecar with an atomic rename, so a genuine one is never a link; and
+ *     `confineOutput` already refuses a link at this exact name. An in-root link
+ *     would point verification at some OTHER document's record while claiming
+ *     to check this one. `confineInput` accepts an in-root PDF link because
+ *     the PDF is the thing the caller named; the sidecar is a derived record
+ *     whose whole meaning is its name. We also cannot hand the engine a
+ *     resolved sidecar path (it takes only the PDF), so "resolve it and allow
+ *     it" would vet one path and read another.
+ *   - A directory, FIFO or device, which can only hang or confuse the read. */
+export function confineSidecar(confinedPdf: string, root: string): SidecarClaim | null {
+  const sidecar = `${confinedPdf}.audit.json`;
+  if (!within(root, sidecar)) throw refusal("audit sidecar", sidecar, root);
+  const st = lstatSync(sidecar, { throwIfNoEntry: false });
+  if (st === undefined) return null;
+  if (st.isSymbolicLink()) throw sidecarRefusal(sidecar, "it is a symbolic link");
+  if (!st.isFile()) throw sidecarRefusal(sidecar, "it is not a regular file");
+  return claimOf(sidecar, st);
+}
+
+/** Re-check the sidecar AFTER the engine has run, before anything it returned
+ *  is used. The engine opens the path itself, so between `confineSidecar` and
+ *  its read the entry could be swapped for a link. If it was (or is still) not
+ *  the same regular file we vetted, the result is discarded unread. This does
+ *  not close the window — a swap that is put back before this runs is not seen;
+ *  only an `O_NOFOLLOW` open inside the engine does (#1563). */
+export function assertSidecarUnchanged(claim: SidecarClaim): void {
+  const st = lstatSync(claim.path, { throwIfNoEntry: false });
+  if (
+    st === undefined ||
+    !st.isFile() ||
+    st.dev !== claim.dev ||
+    st.ino !== claim.ino ||
+    st.size !== claim.size ||
+    st.mtimeMs !== claim.mtimeMs
+  ) {
+    throw sidecarRefusal(claim.path, "it changed while the engine was reading it");
+  }
 }

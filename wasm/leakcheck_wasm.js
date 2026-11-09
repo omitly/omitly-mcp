@@ -37,7 +37,8 @@ function check(bytes) {
 exports.check = check;
 
 /**
- * Engine/version string for the page footer ("scanned locally by Omitly vX").
+ * Engine/version string for the page footer ("scanned locally by Omitly vX"):
+ * the release this wasm was built for, or `dev` (see `stamped_version`).
  * @returns {string}
  */
 function engine_version() {
