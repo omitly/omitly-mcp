@@ -37,6 +37,9 @@ import { randomUUID } from "node:crypto";
 import * as os from "node:os";
 import * as path from "node:path";
 
+/** Marketing-site URL carrying the acquisition tag the website records as source "mcp" (omitly#1854). Every user-facing link from this package to omitly.app uses it. */
+export const OMITLY_SITE_URL = "https://omitly.app/?via=mcp";
+
 export const DEFAULT_FREE_CAP = 10;
 
 export interface UsageState {
@@ -181,7 +184,7 @@ export function freeCapRefusal(tool: string, o: FreeCheckOutcome): {
     message:
       `Free-tier limit reached: ${o.cap} free redaction checks per month, counted locally on this machine (nothing is uploaded). ` +
       `The count resets next month. For unlimited checking — plus actual removal, independent verification and a tamper-evident certificate — ` +
-      `activate the Omitly engine: https://omitly.app. verify_redaction remains free and uncapped. verify_seal needs the native engine.`,
+      `activate the Omitly engine: ${OMITLY_SITE_URL} \u2014 verify_redaction remains free and uncapped. verify_seal needs the native engine.`,
   };
 }
 

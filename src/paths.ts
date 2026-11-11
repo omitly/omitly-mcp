@@ -16,7 +16,7 @@
  * guardrails against confused-deputy mistakes, not a sandbox for a hostile
  * local user (they own the machine; see docs/THREAT-MODEL.md).
  */
-import { lstatSync, realpathSync, type Stats } from "node:fs";
+import { lstatSync, realpathSync, statSync, type Stats } from "node:fs";
 import * as path from "node:path";
 
 /** Is there a directory ENTRY at `p`? Deliberately `lstat`, not `existsSync`:
@@ -92,12 +92,46 @@ export function confineInput(p: string, root: string): string {
   return real;
 }
 
+/** Validate a model-supplied output FOLDER (omitly#1841 `split_pdf`): an existing
+ *  directory that is the allowed root itself or inside it, after symlink
+ *  resolution. `confineInput` cannot be used: `within()` treats the root as
+ *  outside, so it refuses the root, and its "input file not found" is the wrong
+ *  words for a folder. Containment of the RAW path is checked first, before the
+ *  filesystem is touched, so a path outside the root gets the same answer whether
+ *  or not it exists (no existence oracle). Returns the resolved real path. */
+export function confineDir(p: string, root: string): string {
+  const resolved = path.resolve(root, p);
+  if (resolved !== root && !within(root, resolved)) throw refusal("output folder", p, root);
+  let real: string;
+  try {
+    real = realpathSync(resolved);
+  } catch {
+    throw new Error("That output folder does not exist.");
+  }
+  // A link inside the root can point outside it.
+  if (real !== root && !within(root, real)) throw refusal("output folder", p, root);
+  let isDir = false;
+  try {
+    isDir = statSync(real).isDirectory();
+  } catch {
+    isDir = false;
+  }
+  if (!isDir) throw new Error("That output folder does not exist.");
+  return real;
+}
+
 /** Validate a model-supplied OUTPUT path: its parent must exist inside the
  *  root, and neither the file nor its `.audit.json` sidecar may already exist
  *  (never silently overwrite — ask the model to pick a fresh name). Returns
  *  the resolved path to hand to the engine. */
 export function confineOutput(p: string, root: string): string {
   const resolved = path.resolve(root, p);
+  // Containment of the RAW resolved path first, before the filesystem is touched
+  // (as confineInput / confineDir do): otherwise "outside the allowed directory"
+  // vs "output directory not found" tells the caller which folders exist anywhere
+  // on the machine (#1851). The realpath checks below still catch a link inside
+  // the root that points out of it.
+  if (!within(root, resolved)) throw refusal("output path", p, root);
   let parent: string;
   try {
     parent = realpathSync(path.dirname(resolved));

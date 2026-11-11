@@ -15,7 +15,7 @@
  *
  * So: run the BUILT `dist/index.js` through a `node_modules/.bin`-style
  * relative symlink, speak real MCP stdio JSON-RPC to it, and require both the
- * `initialize` handshake and a `tools/list` naming all 11 tools. Direct (non-
+ * `initialize` handshake and a `tools/list` naming every tool. Direct (non-
  * symlinked) invocation is covered too, so a "fix" that only works via a
  * symlink also fails.
  */
@@ -44,6 +44,12 @@ const EXPECTED_TOOLS = [
   "check_license",
   "propose_redactions",
   "get_proposal_status",
+  // omitly#1841 phase B: the five free page tools.
+  "pdf_info",
+  "merge_pdfs",
+  "extract_pages",
+  "split_pdf",
+  "edit_pages",
 ];
 
 interface Handshake {

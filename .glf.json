@@ -1,0 +1,5 @@
+{
+  "replace": {
+    "pako@1.0.11": "./pako-1.0.11-license.txt"
+  }
+}

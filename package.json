@@ -1,6 +1,6 @@
 {
   "name": "omitly-mcp",
-  "version": "5.4.0",
+  "version": "5.5.0",
   "type": "module",
   "description": "Model Context Protocol server exposing Omitly's local, verifiable PDF redaction to AI agents. Redaction runs on-device — documents are never uploaded.",
   "keywords": [
@@ -15,7 +15,7 @@
     "privacy"
   ],
   "license": "SEE LICENSE IN LICENSE",
-  "homepage": "https://omitly.app/pdf-redaction-mcp",
+  "homepage": "https://omitly.app/pdf-redaction-mcp/?via=mcp",
   "mcpName": "io.github.omitly/omitly-mcp",
   "repository": {
     "type": "git",
@@ -38,6 +38,7 @@
     "start": "node dist/index.js",
     "dev": "tsc --watch",
     "test": "tsc && node --test --test-skip-pattern=\"(v2-produced file|v2 verdict that disagrees|DECISION_CHANNELS is the shared vectors|surfaces decisionChannel only when verified)\" \"dist/**/*.test.js\"",
+    "fuzz": "node fuzz/edit-tools.fuzz.mjs",
     "prepublishOnly": "npm run build",
     "mcpb:prep": "node mcpb/scripts/copy-wasm.mjs && cp LICENSE mcpb/LICENSE && npm --prefix mcpb ci",
     "mcpb:validate": "npx -y @anthropic-ai/mcpb@2.1.2 validate mcpb/manifest.json",
@@ -45,6 +46,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
+    "pdf-lib": "1.17.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {

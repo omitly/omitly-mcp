@@ -27,7 +27,7 @@ is unchanged since it was sealed. It does not show that nothing else sensitive
 remains in the document — the opposite of pasting a confidential file into a
 chat model.
 
-**Five of the eleven tools (`find_sensitive_regions`, `locate_text`,
+**Five of the eighteen tools (`find_sensitive_regions`, `locate_text`,
 `check_redaction`, `verify_redaction`, `extract_pdf_text`) work out of the
 box — `npm install`, no Rust toolchain, no native binary, no desktop app.**
 They run on a wasm-bindgen build of the same detector that powers the web
@@ -119,6 +119,26 @@ prompt is read from the shipped `skill/SKILL.md`, so the two never differ.
 | `check_license` | Reports the current licence or trial state — tier, trial days left, the vendor-signed licensee name, which resolution step supplied the licence, and whether it is bound to this machine. Free, takes no arguments, reads no document, and is re-resolved on every call so buy → save licence → call again works without a restart. **Never returns the device fingerprint or the licence file's contents** — device binding is a yes/no. Requires a native engine: the wasm free tier has no licence concept. |
 | `propose_redactions` | omitly#1643, bring your own AI: proposes regions for a PERSON to accept in the Omitly desktop app. Writes nothing. Requires the desktop app to be running on this computer; on acceptance the desktop removes, verifies and seals, and the record shows a person decided (`human-desktop`). |
 | `get_proposal_status` | Follows a queued proposal: pending, accepted, rejected, applied (with output path and verdict), failed or expired. Free; reads no document. |
+| `pdf_info` | omitly#1841, free page tool: page count, each page's size and rotation (first 500), and flags for encryption, forms, signatures, comments, XFA and layers. Counts and flags only, never text. Works on encrypted files. Page numbers start at 1. |
+| `merge_pdfs` | omitly#1841, free page tool: joins 2 to 50 PDFs, in order, into one NEW PDF. Keeps every page and the forms; bookmarks, metadata, page labels and layers are not carried over (listed in `lost`). Digital signatures are removed. |
+| `extract_pages` | omitly#1841, free page tool: copies chosen pages (numbers and ranges, 1-based, in the order listed) into one NEW PDF. |
+| `split_pdf` | omitly#1841, free page tool: splits a PDF into one NEW PDF per range, named `<prefix>-p<first>-<last>.pdf`, all or none. |
+| `edit_pages` | omitly#1841, free page tool: reorders, deletes, rotates and inserts blank pages in one step from the FINAL page list. Writes a NEW PDF. |
+
+### Page tools (omitly#1841)
+
+`pdf_info`, `merge_pdfs`, `extract_pages`, `split_pdf` and `edit_pages` are free and uncapped. They run inside this
+package with no desktop app and no licence, never go through the accept-in-app queue, and are not counted toward the
+10-a-month check cap. Each writes a NEW `.pdf` inside the allowed folder (never overwriting, never into a hidden
+folder or `.git`) and reports what it could not carry over in `lost` and `warnings`. Page numbers start at 1; the
+check tools return 0-based `page` values, so add 1.
+
+All PDF parsing for these five tools happens in a child process (killed after 120 seconds, started with an empty
+environment; on Windows the system adds a few variables such as `PATH` and `SystemRoot`, and none of them reaches the agent), so a damaged or hostile PDF cannot hang or crash the server. They are **not redaction** and do not
+sanitise a document: pages you leave out are not copied, but document metadata, bookmark titles and anything a kept
+page shares with a left-out page can remain. Digital signatures are removed from the output (it is a new, unsigned
+document). The four tools that write refuse encrypted PDFs and dynamic XFA forms; `pdf_info` answers for an encrypted PDF (`encrypted: true`). When `OMITLY_ALLOWED_DIR` is not set and the working
+directory is your home folder or the filesystem root, these tools refuse and ask you to set it.
 
 ### Accept-in-app (omitly#1643)
 
@@ -166,7 +186,7 @@ See [DEMO.md](./DEMO.md) for a full Claude Code walkthrough.
 
 ## Status
 
-The MCP surface (eleven tools, schemas, transport), the native engine binary
+The MCP surface (eighteen tools, schemas, transport), the native engine binary
 (`crates/omitly-cli`, built as `omitly-redact`), and the bundled wasm engine
 (`crates/leakcheck-wasm`, covering the five free tools without a native
 binary) are all implemented and pass end-to-end tests. `find_sensitive_regions`
@@ -324,6 +344,13 @@ reads and writes to one allowed directory:
   outside it is refused.
 - Outputs **never overwrite an existing file** (or its `.audit.json` sidecar);
   the agent is asked to pick a fresh name instead.
+- The five page tools re-check, immediately before and after each write, that the output
+  folder still resolves to the folder that was confined, and remove what they placed if it
+  does not. A hostile local user who swaps that folder for a symlink in the instant between a
+  check and the system call that creates the file can still redirect one write: that window
+  is not closed, and hostile local users are outside this server's threat model (below). Likewise,
+  if another process renames the output folder mid-call, the call fails but files already placed,
+  and a temp file, can remain under the renamed folder.
 - **`OMITLY_ENGINE_TIMEOUT_MS`** (default 120000) — a wedged engine process is
   killed at the deadline instead of hanging the agent's tool call.
 

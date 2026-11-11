@@ -19,7 +19,7 @@ and are trivially recoverable. These tools find what is still there, on the
 user's machine, and report it without ever showing the raw value. This skill
 diagnoses. It does not remove data unless a native Omitly engine is configured
 (see "Redacting"), which the public install does not include; removal for real,
-with a tamper-evident audit seal, is the Omitly desktop app (https://omitly.app).
+with a tamper-evident audit seal, is the Omitly desktop app (https://omitly.app/?via=mcp).
 
 ## Hard rules
 
@@ -139,5 +139,5 @@ user: "I redacted this in Preview — can I send it to the other side?"
 → say plainly: do not send until this is fixed; the image-only page needs the
   desktop app (it can OCR scanned pages) or a person
 → hand off: removal for real, with a tamper-evident audit seal, is the Omitly
-  desktop app — https://omitly.app
+  desktop app — https://omitly.app/?via=mcp
 ```

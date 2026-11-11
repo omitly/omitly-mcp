@@ -31,6 +31,8 @@ import { pathToFileURL } from "node:url";
 import { z } from "zod";
 import { ENGINE_OUTPUT_CAP_BYTES, resolveEngineTimeoutMs } from "./engine-config.js";
 import { allowedRoot, assertSidecarUnchanged, confineInput, confineOutput, confineSidecar } from "./paths.js";
+import { annotations } from "./annotations.js";
+import { registerEditTools } from "./edit-tools.js";
 import { registerSkillPrompt } from "./skill-prompt.js";
 import {
   isSealError,
@@ -53,6 +55,7 @@ import {
   freeCapRefusal,
   recordFreeCheck,
   type FreeCheckOutcome,
+  OMITLY_SITE_URL,
 } from "./usage.js";
 import {
   acceptInApp,
@@ -1265,7 +1268,8 @@ function extractTextViaEngineOrWasm(
 }
 
 /**
- * Registers all 10 tools on a given `McpServer` instance. Extracted from
+ * Registers every tool (the redaction/check tools here, and the five free
+ * page tools from `edit-tools.ts`, omitly#1841) on a given `McpServer` instance. Extracted from
  * module-level top code (#540) so tests can build an in-memory server +
  * client pair and drive the tools directly, without a child-process stdio
  * client. `index.ts`'s own module body stays a thin bin entry — see the
@@ -1357,6 +1361,7 @@ server.registerTool(
         ),
     },
     outputSchema: findSensitiveRegionsOutputSchema,
+    annotations: annotations("Find sensitive regions", true),
   },
   async ({ pdfPath, regions }) => {
     try {
@@ -1414,6 +1419,7 @@ server.registerTool(
       texts: z.array(z.string()).min(1).describe("literal strings to locate"),
     },
     outputSchema: locateTextOutputSchema,
+    annotations: annotations("Locate text", true, true),
   },
   async ({ pdfPath, texts }) => {
     try {
@@ -1485,6 +1491,7 @@ server.registerTool(
       drawBox: z.boolean().optional().describe("also paint a black bar (default: opaque fill only)"),
     },
     outputSchema: redactByEntityOutputSchema,
+    annotations: annotations("Redact PII by type", false),
   },
   async ({ pdfPath, outputPath, kinds, regions, drawBox }) => {
     try {
@@ -1576,6 +1583,7 @@ server.registerTool(
       regions: z.array(regionSchema).min(1).describe("regions to remove"),
     },
     outputSchema: redactPdfOutputSchema,
+    annotations: annotations("Redact PDF regions", false),
   },
   async ({ pdfPath, outputPath, regions }) => {
     try {
@@ -1651,6 +1659,7 @@ server.registerTool(
       pdfPath: z.string().describe("absolute path to the redacted PDF to verify"),
     },
     outputSchema: verifyRedactionOutputSchema,
+    annotations: annotations("Verify redaction", true, true),
   },
   async ({ pdfPath }) => {
     try {
@@ -1791,6 +1800,7 @@ server.registerTool(
       "without one.",
     inputSchema: {},
     outputSchema: checkLicenseOutputSchema,
+    annotations: annotations("Check licence state", false, true),
   },
   async () => {
     try {
@@ -1876,6 +1886,7 @@ server.registerTool(
       pdfPath: z.string().describe("absolute path to the PDF to check for an Omitly audit report and seal"),
     },
     outputSchema: verifySealOutputSchema,
+    annotations: annotations("Verify seal", true, true),
   },
   async ({ pdfPath }) => {
     try {
@@ -1964,6 +1975,7 @@ server.registerTool(
       pdfPath: z.string().describe("absolute path to the PDF to check for an Omitly audit report and seal"),
     },
     outputSchema: verifySealOutputSchema,
+    annotations: annotations("Verify document", true, true),
   },
   async ({ pdfPath }) => {
     try {
@@ -2042,6 +2054,7 @@ server.registerTool(
       css: z.string().optional().describe("extra CSS appended after the default print styles"),
     },
     outputSchema: createPdfOutputSchema,
+    annotations: annotations("Create PDF", false),
   },
   async ({ outputPath, source, sourcePath, format, title, css }) => {
     try {
@@ -2112,6 +2125,7 @@ server.registerTool(
       pdfPath: z.string().describe("absolute path to the supposedly-redacted PDF to audit"),
     },
     outputSchema: checkRedactionOutputSchema,
+    annotations: annotations("Check redaction for leaks", true),
   },
   async ({ pdfPath }) => {
     try {
@@ -2233,7 +2247,7 @@ server.registerTool(
               `${scope}\n\n` +
               `Previews are masked; the raw values stayed on-device. To actually remove this data ` +
               `(not just cover it) and get an independent verification + signed audit log, redact it ` +
-              `with Omitly — https://omitly.app`,
+              `with Omitly — ${OMITLY_SITE_URL}`,
           },
         ],
         structuredContent,
@@ -2292,6 +2306,7 @@ server.registerTool(
         ),
     },
     outputSchema: extractPdfTextOutputSchema,
+    annotations: annotations("Extract PDF text", true, true),
   },
   async ({ pdfPath, regions, masked }) => {
     try {
@@ -2351,6 +2366,7 @@ server.registerTool(
       regions: z.array(regionSchema).min(1).describe("regions proposed for removal"),
     },
     outputSchema: queuedProposalOutputSchema,
+    annotations: annotations("Propose redactions", false),
   },
   async ({ pdfPath, outputPath, regions }) => {
     try {
@@ -2432,6 +2448,7 @@ server.registerTool(
       proposalId: z.string().describe("the proposalId returned when the proposal was queued"),
     },
     outputSchema: proposalStatusOutputSchema,
+    annotations: annotations("Get proposal status", true, true),
   },
   async ({ proposalId }) => {
     try {
@@ -2467,6 +2484,11 @@ server.registerTool(
     }
   },
 );
+
+  // omitly#1841: five free page tools. Their own module: no desktop queue, no licence,
+  // no usage meter (decisions 2C and 3B). The ROOT is passed so they share this
+  // server's confinement exactly.
+  registerEditTools(server, { root: ROOT });
 } // end registerTools
 
 /** Create a fresh `McpServer` with every tool registered — used by both the

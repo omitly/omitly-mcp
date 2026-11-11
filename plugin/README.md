@@ -31,6 +31,6 @@ pages are desktop-only in Omitly 5.3: these tools have no OCR path, do not read
 them, and never report one as fully scanned (`scanComplete` is false and the
 text leads with INCOMPLETE SCAN; `redact` returns `needs_review`/`review_required`) — the
 desktop app can OCR them. Removing the sensitive content is done in the Omitly
-desktop app: https://omitly.app
+desktop app: https://omitly.app/?via=mcp
 
 The skill file in this plugin mirrors `skill/SKILL.md` in the `omitly-mcp` package.

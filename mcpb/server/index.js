@@ -163,6 +163,7 @@ server.tool(
   {
     pdfPath: z.string().describe("absolute path to the PDF to scan"),
   },
+  { title: "Find sensitive regions", readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   async ({ pdfPath }) => {
     try {
       const bytes = readConfinedInput(pdfPath, ROOT);
@@ -177,7 +178,7 @@ server.tool(
         `${evaluationBanner(meter)}\n\n` +
         `Found ${found.length} candidate region(s). Diagnosis only — this free ` +
         `tool does not redact. Removing the data for real, with a verified audit ` +
-        `trail, is the licensed Omitly desktop app (https://omitly.app).\n\n` +
+        `trail, is the licensed Omitly desktop app (https://omitly.app/?via=mcp).\n\n` +
         JSON.stringify(found, null, 2);
       return { content: [{ type: "text", text: summary }] };
     } catch (e) {
@@ -199,6 +200,7 @@ server.tool(
     pdfPath: z.string().describe("absolute path to the PDF to search"),
     texts: z.array(z.string()).min(1).describe("literal strings to locate"),
   },
+  { title: "Locate text", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   async ({ pdfPath, texts }) => {
     try {
       const res = runWasmLocate(readConfinedInput(pdfPath, ROOT), texts);
@@ -224,6 +226,7 @@ server.tool(
   {
     pdfPath: z.string().describe("absolute path to the redacted PDF to verify"),
   },
+  { title: "Verify redaction", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   async ({ pdfPath }) => {
     try {
       const res = runWasmScan(readConfinedInput(pdfPath, ROOT));
@@ -270,6 +273,7 @@ server.tool(
   {
     pdfPath: z.string().describe("absolute path to the supposedly-redacted PDF to audit"),
   },
+  { title: "Check redaction for leaks", readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   async ({ pdfPath }) => {
     try {
       const bytes = readConfinedInput(pdfPath, ROOT);
@@ -322,7 +326,7 @@ server.tool(
         `Diagnosis only — this free tool does not redact and does not issue a ` +
         `certificate. To remove the data for real, with an offline-verifiable, ` +
         `tamper-evident audit trail, use the licensed Omitly desktop app ` +
-        `(https://omitly.app).`;
+        `(https://omitly.app/?via=mcp).`;
 
       return { content: [{ type: "text", text: summary }], isError: !clean };
     } catch (e) {
