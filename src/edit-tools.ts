@@ -9,9 +9,10 @@
  * PLACES them, create-only, never by `rename` (which overwrites).
  *
  * What these tools never do (decisions 2C and 3B, section 4.5): go through the
- * desktop accept-in-app queue, need a licence, carry an EVALUATION banner, count
- * toward the free leak-check cap, or make a network call. This file therefore
- * imports nothing from `desktop.ts` or `usage.ts`; a structural test asserts it.
+ * desktop accept-in-app queue, need a licence, carry an EVALUATION banner, keep any
+ * usage count (the scan tools' monthly cap no longer exists either: omitly#1859, see
+ * the top of `usage.ts`), or make a network call. This file therefore imports nothing
+ * from `desktop.ts` or `usage.ts`; a structural test asserts it.
  *
  * The worst a call can do is write a NEW `.pdf` inside the allowed root, outside
  * hidden folders and `.git`, within the size limits.

@@ -1,7 +1,7 @@
 {
   "name": "omitly",
   "displayName": "Omitly",
-  "version": "5.6.1",
+  "version": "5.6.2",
   "description": "Free on-device PDF tools for Claude: find sensitive content in a PDF, check whether a redacted PDF still exposes sensitive text, and merge, split, extract and edit pages. Your PDFs never leave your machine.",
   "author": {
     "name": "Omitly",

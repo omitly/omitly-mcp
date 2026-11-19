@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "omitly-leak-check",
   "display_name": "Omitly \u2014 Redaction Leak Check (free)",
-  "version": "5.6.1",
+  "version": "5.6.2",
   "description": "Local, offline check for exposed or recoverable sensitive content in PDFs, plus verification of a redacted PDF. Diagnosis only \u2014 nothing is uploaded, nothing is redacted.",
   "long_description": "Omitly Redaction Leak Check runs entirely on your machine: it re-extracts the text layer of a PDF (including text hidden under black-box redaction marks, superseded incremental-update revisions, metadata, and form fields) and reports anything that looks like PII \u2014 emails, SSNs, phone numbers, card numbers, and Australian identifiers (TFN/ABN/ACN/Medicare/CRN/IHI/BSB). This is a diagnosis-only tool: it never redacts a file and never issues a certificate. All four tools are free with no usage limit; find_sensitive_regions and check_redaction results carry a sentence saying the tool removes nothing and is not a removal certificate. Made by Omitly: https://omitly.app",
   "author": {
