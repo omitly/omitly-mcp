@@ -9,8 +9,10 @@
  * whole protocol:
  *
  *   desktop.json          written by the desktop every ~15 s while it runs:
- *                         { pid, version, accept_in_app, updated_at }.
- *                         Fresh = updated within PRESENCE_FRESH_MS.
+ *                         { pid, version, accept_in_app, updated_at, licence? }.
+ *                         Fresh = updated within PRESENCE_FRESH_MS. `licence` is
+ *                         the app's own coarse licence state (omitly#1870): WORDING
+ *                         INPUT ONLY, see DesktopLicence.
  *   proposals/<id>.json   written HERE when a redaction write arrives while the
  *                         desktop is present with accept-in-app on. The desktop
  *                         rewrites the same file with its decision.
@@ -29,12 +31,15 @@
  * not entitled to).
  */
 
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import {
+  closeSync,
   existsSync,
   mkdirSync,
+  openSync,
   readdirSync,
   readFileSync,
+  readSync,
   renameSync,
   rmSync,
   writeFileSync,
@@ -48,11 +53,55 @@ export const PRESENCE_FRESH_MS = 45_000;
 /** How often this server refreshes its own client heartbeat. */
 export const CLIENT_HEARTBEAT_MS = 20_000;
 
+/**
+ * omitly#1870: what the desktop app says about its OWN licence, coarsely. It is advisory wording
+ * input for the answer to a removal request and nothing else. This server never verifies a licence
+ * and nothing here unlocks, enables or skips anything: the desktop app is the only enforcer, and a
+ * stale, missing, malformed or hand-edited value can only change the words shown (and, for
+ * `trial_over`, make the server DECLINE to queue a proposal the app would refuse to accept anyway,
+ * i.e. do less, never more). No name, licence id or email is ever in this field.
+ *
+ * "unknown" in the file, and anything this parser does not recognise, reads as ABSENT: exactly the
+ * behaviour of an app that does not write the field.
+ */
+export type DesktopLicence =
+  | { state: "trial"; daysLeft: number }
+  | { state: "trial_over" }
+  | { state: "licensed" }
+  | { state: "updates_lapsed" };
+
+/** A trial is 14 days; anything above this in the file is not a number this app writes. */
+const MAX_TRIAL_DAYS_LEFT = 60;
+
+/** Parse the heartbeat's `licence` value defensively. Anything but a known, well-formed state is
+ *  `undefined`. Extra keys are ignored; only own properties are read. */
+export function parseDesktopLicence(raw: unknown): DesktopLicence | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const own = (k: string): unknown => (Object.prototype.hasOwnProperty.call(raw, k) ? (raw as Record<string, unknown>)[k] : undefined);
+  switch (own("state")) {
+    case "trial": {
+      const d = own("days_left");
+      if (typeof d !== "number" || !Number.isInteger(d) || d < 1 || d > MAX_TRIAL_DAYS_LEFT) return undefined;
+      return { state: "trial", daysLeft: d };
+    }
+    case "trial_over":
+      return { state: "trial_over" };
+    case "licensed":
+      return { state: "licensed" };
+    case "updates_lapsed":
+      return { state: "updates_lapsed" };
+    default:
+      return undefined;
+  }
+}
+
 export interface DesktopPresence {
   pid: number;
   version: string;
   accept_in_app: boolean;
   updated_at: string;
+  /** The app's own licence state, when it states one (omitly#1870). Wording only. */
+  licence?: DesktopLicence;
 }
 
 export interface ProposalClient {
@@ -91,9 +140,38 @@ export interface Proposal {
   output?: string | null;
   verdict?: string | null;
   note?: string | null;
+  /**
+   * omitly#1890 (D3): lowercase hex SHA-256 of the PDF bytes the AI analysed. For a proposal with
+   * coordinates it is the digest of the bytes the scan loaded (the scan's `analysisId`), never a
+   * hash taken at enqueue. The desktop hashes the file on disk at Accept and refuses on a mismatch.
+   */
+  pdfSha256?: string;
+  /**
+   * Present (and `"at-queue"`) only on a kinds-only proposal (`redact_by_entity`): it carries no
+   * coordinates, so there is no scan to bind to, and `pdfSha256` was taken when it was queued.
+   */
+  binding?: "at-queue";
 }
 
-export type ProposalInput = Pick<Proposal, "client" | "tool" | "pdfPath" | "outputPath" | "regions" | "kinds">;
+type ProposalBase = Pick<Proposal, "client" | "tool" | "pdfPath" | "outputPath">;
+
+/**
+ * A proposal with coordinates must name the scan those coordinates came from. `analysisId` is
+ * required here but may be `undefined` at runtime (it comes from an optional tool argument):
+ * `enqueueProposal` refuses it then, rather than the type system pretending the model supplied one.
+ */
+export type ProposalInput = ProposalBase &
+  (
+    | { regions: ProposalRegion[]; kinds?: undefined; analysisId: string | undefined }
+    | { regions?: undefined; kinds?: string[]; analysisId?: undefined }
+  );
+
+/** What `enqueueProposal` hands back: the record as written, plus `revision`, the SHA-256 of the
+ *  exact bytes written to `proposals/<id>.json` (omitly#1890, X9). */
+export interface EnqueuedProposal {
+  proposal: Proposal;
+  revision: string;
+}
 
 const ID_RE = /^[0-9a-f]{24}$/;
 const PROPOSAL_STATUSES: ReadonlySet<string> = new Set(["pending", "accepted", "rejected", "applied", "failed", "expired"]);
@@ -115,13 +193,86 @@ function ensureDir(dir: string): void {
   mkdirSync(dir, { recursive: true, mode: 0o700 });
 }
 
-/** Write-then-rename so a reader never sees a half-written file. 0600. */
-function writeAtomic(file: string, value: unknown): void {
+/** Write-then-rename so a reader never sees a half-written file. 0600. Returns the SHA-256 (lowercase
+ *  hex) of the exact bytes written, so a caller can echo the file's revision without re-reading it. */
+function writeAtomic(file: string, value: unknown): string {
   ensureDir(path.dirname(file));
   const tmp = `${file}.tmp-${process.pid}-${randomBytes(4).toString("hex")}`;
-  writeFileSync(tmp, JSON.stringify(value, null, 2) + "\n", { mode: 0o600 });
+  const bytes = Buffer.from(JSON.stringify(value, null, 2) + "\n", "utf8");
+  writeFileSync(tmp, bytes, { mode: 0o600 });
   renameSync(tmp, file);
+  return sha256Hex(bytes);
 }
+
+/** Lowercase hex SHA-256 of some bytes. */
+export function sha256Hex(bytes: Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+/** Lowercase hex SHA-256 of a file, streamed through a 64 KiB buffer (never the whole file in
+ *  memory). Synchronous on purpose: `enqueueProposal` is, and a chunked read loop is still a stream. */
+export function sha256OfFile(file: string): string {
+  const hash = createHash("sha256");
+  const buf = Buffer.allocUnsafe(64 * 1024);
+  const fd = openSync(file, "r");
+  try {
+    for (;;) {
+      const n = readSync(fd, buf, 0, buf.length, null);
+      if (n === 0) break;
+      hash.update(buf.subarray(0, n));
+    }
+  } finally {
+    closeSync(fd);
+  }
+  return hash.digest("hex");
+}
+
+/**
+ * omitly#1890 (D3, X4): the document identity a proposal's coordinates are bound to.
+ *
+ * A scan (`find_sensitive_regions`, `locate_text`) returns an opaque `analysisId`. Here it maps to
+ * `{ path, sha256, at }`, where `sha256` is the digest of the bytes the scan ACTUALLY LOADED (the
+ * wasm buffer it held, or the native CLI's `inputSha256` of the input it read once), never a hash of
+ * the path taken before or after. `enqueueProposal` looks the id up (never the path), refuses an id
+ * that is not this call's document, hashes the file now and refuses if it differs, and writes the
+ * id's digest into the proposal. So scan A, replace the file with B, scan B, then propose A's
+ * coordinates with A's id is refused: B's scan is a different id with a different digest.
+ *
+ * The map is process-local and bounded: past `ANALYSES_MAX` the oldest id is forgotten (an agent
+ * then has to scan again, which is the safe direction).
+ */
+export const ANALYSES_MAX = 256;
+interface Analysis {
+  path: string;
+  sha256: string;
+  at: string;
+}
+const analyses = new Map<string, Analysis>();
+const SHA256_RE = /^[0-9a-f]{64}$/;
+
+/** Register a scan of `confinedPath` whose loaded bytes hash to `sha256`; returns its `analysisId`. */
+export function recordAnalysis(confinedPath: string, sha256: string, now: Date = new Date()): string {
+  if (!SHA256_RE.test(sha256)) throw new Error("analysis digest is not a SHA-256");
+  const id = randomBytes(16).toString("hex");
+  analyses.set(id, { path: confinedPath, sha256, at: now.toISOString() });
+  while (analyses.size > ANALYSES_MAX) {
+    const oldest = analyses.keys().next().value;
+    if (oldest === undefined) break;
+    analyses.delete(oldest);
+  }
+  return id;
+}
+
+/** `recordAnalysis` for an engine response: `undefined` (no id) when the engine reported no valid
+ *  digest, e.g. a native engine older than this server. No id means no proposal can be queued for
+ *  that scan, which fails closed. */
+export function recordAnalysisOf(confinedPath: string, digest: unknown): string | undefined {
+  return typeof digest === "string" && SHA256_RE.test(digest) ? recordAnalysis(confinedPath, digest) : undefined;
+}
+
+export const ANALYSIS_REQUIRED_MESSAGE =
+  "Scan this document with find_sensitive_regions or locate_text and pass its analysisId before proposing boxes for it.";
+export const DOCUMENT_CHANGED_MESSAGE = "The document changed since you looked at it; scan it again.";
 
 function readJson(file: string): unknown {
   try {
@@ -148,11 +299,13 @@ export function readDesktopPresence(now: number = Date.now()): DesktopPresence |
     return null;
   }
   if (!isFresh(p.updated_at, now, PRESENCE_FRESH_MS)) return null;
+  const licence = parseDesktopLicence(p.licence);
   return {
     pid: p.pid,
     version: p.version,
     accept_in_app: p.accept_in_app,
     updated_at: p.updated_at as string,
+    ...(licence ? { licence } : {}),
   };
 }
 
@@ -166,8 +319,39 @@ export function newProposalId(): string {
   return randomBytes(12).toString("hex");
 }
 
-/** Queue a proposal for the desktop. Returns the record as written. */
-export function enqueueProposal(input: ProposalInput, now: Date = new Date()): Proposal {
+/**
+ * Queue a proposal for the desktop. Returns the record as written and its `revision`.
+ *
+ * With coordinates (`regions`) the proposal must carry the `analysisId` of the scan they came from
+ * (omitly#1890, D3). Nothing is queued, and nothing is written, if the id is missing, unknown,
+ * evicted or names another path, or if the file on disk no longer hashes to what that scan loaded.
+ * The `pdfSha256` written is the id's digest, never a hash taken now.
+ *
+ * Without coordinates (`redact_by_entity`, kinds only) there is no scan to bind to: `pdfSha256` is
+ * taken now and the record says `binding: "at-queue"`.
+ */
+export function enqueueProposal(input: ProposalInput, now: Date = new Date()): EnqueuedProposal {
+  let pdfSha256: string;
+  let atQueue = false;
+  if (input.regions !== undefined) {
+    const analysis = typeof input.analysisId === "string" ? analyses.get(input.analysisId) : undefined;
+    if (!analysis || analysis.path !== input.pdfPath) throw new Error(ANALYSIS_REQUIRED_MESSAGE);
+    let onDisk: string;
+    try {
+      onDisk = sha256OfFile(input.pdfPath);
+    } catch {
+      throw new Error(DOCUMENT_CHANGED_MESSAGE);
+    }
+    if (onDisk !== analysis.sha256) throw new Error(DOCUMENT_CHANGED_MESSAGE);
+    pdfSha256 = analysis.sha256;
+  } else {
+    try {
+      pdfSha256 = sha256OfFile(input.pdfPath);
+    } catch {
+      throw new Error("The document could not be read, so nothing was queued.");
+    }
+    atQueue = true;
+  }
   const proposal: Proposal = {
     id: newProposalId(),
     created_at: now.toISOString(),
@@ -177,10 +361,12 @@ export function enqueueProposal(input: ProposalInput, now: Date = new Date()): P
     outputPath: input.outputPath,
     ...(input.regions ? { regions: input.regions } : {}),
     ...(input.kinds ? { kinds: input.kinds } : {}),
+    pdfSha256,
+    ...(atQueue ? { binding: "at-queue" as const } : {}),
     status: "pending",
   };
-  writeAtomic(path.join(proposalsDir(), `${proposal.id}.json`), proposal);
-  return proposal;
+  const revision = writeAtomic(path.join(proposalsDir(), `${proposal.id}.json`), proposal);
+  return { proposal, revision };
 }
 
 /** Read one proposal by id. Unknown or malformed ids read as null — the id is

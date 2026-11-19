@@ -112,7 +112,7 @@ test("find_sensitive_regions: validates outputSchema and leaks nothing", async (
       name: "find_sensitive_regions",
       arguments: { pdfPath: docPath },
     });
-    assert.equal(res.isError, undefined);
+    assert.ok(!res.isError);
     assert.equal(findSensitiveRegionsOutputSchema.safeParse(res.structuredContent).success, true);
     assert.equal(res.structuredContent.count, 3); // email, ssn, phone — not the sentinel
     assertNoLeak("find_sensitive_regions", res);
@@ -125,7 +125,7 @@ test("locate_text: validates outputSchema and leaks nothing outside its own inpu
       name: "locate_text",
       arguments: { pdfPath: docPath, texts: [CANARY_EMAIL, CANARY_SSN] },
     });
-    assert.equal(res.isError, undefined);
+    assert.ok(!res.isError);
     assert.equal(locateTextOutputSchema.safeParse(res.structuredContent).success, true);
     assert.equal(res.structuredContent.count, 2);
     // Excluded: the caller supplied these as search input. Everything else
@@ -140,7 +140,7 @@ test("extract_pdf_text: default (masked) — PII is masked; ordinary non-PII tex
       name: "extract_pdf_text",
       arguments: { pdfPath: docPath },
     });
-    assert.equal(res.isError, undefined);
+    assert.ok(!res.isError);
     assert.equal(extractPdfTextOutputSchema.safeParse(res.structuredContent).success, true);
     assert.equal(res.structuredContent.masked, true);
     assert.equal(res.structuredContent.pages.length, 1);
@@ -162,7 +162,7 @@ test("extract_pdf_text: masked:false is the documented raw opt-in — it DOES co
       name: "extract_pdf_text",
       arguments: { pdfPath: docPath, masked: false },
     });
-    assert.equal(res.isError, undefined);
+    assert.ok(!res.isError);
     assert.equal(extractPdfTextOutputSchema.safeParse(res.structuredContent).success, true);
     assert.equal(res.structuredContent.masked, false);
     const text = res.structuredContent.pages[0].text;
@@ -184,10 +184,13 @@ test("redact_by_entity: validates outputSchema and leaks nothing", async () => {
       name: "redact_by_entity",
       arguments: { pdfPath: docPath, outputPath },
     });
-    assert.equal(res.isError, undefined);
+    assert.ok(!res.isError);
     assert.equal(redactByEntityDoneSchema.safeParse(res.structuredContent).success, true);
     assert.equal(res.structuredContent.redactedCount, 3);
-    assert.equal(res.structuredContent.verdict, "pass");
+    // Contract §3.6/§6.1: the engine's record is `engineAudit`, never a verdict; the outcome is capped at needs_review (W11).
+    assert.equal(res.structuredContent.verdict, undefined);
+    assert.equal(res.structuredContent.outcome, "needs_review");
+    assert.equal(res.structuredContent.engineAudit.verdict, "pass");
     assertNoLeak("redact_by_entity", res);
   });
 });
@@ -203,14 +206,16 @@ test("redact_pdf: validates outputSchema and leaks nothing", async () => {
         regions: [{ page: 0, x: 10, y: 700, width: 200, height: 12, reason: "PII: email" }],
       },
     });
-    assert.equal(res.isError, undefined);
+    assert.ok(!res.isError);
     assert.equal(redactPdfDoneSchema.safeParse(res.structuredContent).success, true);
     assert.equal(res.structuredContent.regionCount, 1);
     // omitly#1104: the engine's v2 verdict reaches the typed output and text.
-    assert.equal(res.structuredContent.audit.auditSchema, "omitly.audit/v2");
-    assert.equal(res.structuredContent.audit.userVerdict, "safe_to_send");
-    assert.equal(res.structuredContent.audit.blocking, false);
-    assert.ok(res.content[0].text.includes("Result: Safe to Send"), res.content[0].text);
+    assert.equal(res.structuredContent.engineAudit.auditSchema, "omitly.audit/v2");
+    assert.equal(res.structuredContent.engineAudit.userVerdict, "safe_to_send");
+    assert.equal(res.structuredContent.engineAudit.blocking, false);
+    assert.equal(res.structuredContent.outcome, "needs_review", "a redaction record is not a check of the document (W11)");
+    assert.ok(res.content[0].text.includes("The engine's record of this redaction: no failed region."), res.content[0].text);
+    assert.ok(!res.content[0].text.includes("Safe to Send"), res.content[0].text);
     assertNoLeak("redact_pdf", res);
   });
 });
@@ -242,10 +247,12 @@ test("verify_redaction (rescan path, no sidecar): validates outputSchema and lea
       name: "verify_redaction",
       arguments: { pdfPath: docPath },
     });
-    assert.equal(res.isError, true);
+    // Contract §3.3: the re-scan is a completed check (isError false) with a needs_review outcome for the findings.
+    assert.equal(res.isError, false);
     assert.equal(verifyRedactionOutputSchema.safeParse(res.structuredContent).success, true);
     assert.equal(res.structuredContent.mode, "rescan");
     assert.equal(res.structuredContent.clean, false);
+    assert.equal(res.structuredContent.outcome, "needs_review");
     assertNoLeak("verify_redaction (rescan)", res);
   });
 });
@@ -261,10 +268,12 @@ test("verify_seal: validates outputSchema and leaks nothing", async () => {
     // `false` here, not absent — so this checks the verdict instead.
     assert.equal(res.isError, false);
     assert.equal(verifySealOutputSchema.safeParse(res.structuredContent).success, true);
-    assert.equal(res.structuredContent.verdict, "verified");
-    assert.equal(res.structuredContent.sealValid, true);
+    // Contract §3.5: a seal is integrity only; the outcome is never safe_to_send. The file's own report's word is attributed.
+    assert.equal(res.structuredContent.outcome, "incomplete");
+    assert.equal(res.structuredContent.embeddedReport.verifierVerdict, "verified");
+    assert.equal(res.structuredContent.embeddedReport.sealValid, true);
     // omitly#1588: the v1 label is in the structured result AND the text.
-    assert.equal(res.structuredContent.sealEraLabel, "classical-era seal (v1)");
+    assert.equal(res.structuredContent.seal.eraLabel, "classical-era seal (v1)");
     assert.match(res.content[0].text, /Seal format: classical-era seal \(v1\)/);
     assertNoLeak("verify_seal", res);
   });
@@ -280,10 +289,10 @@ test("verify_document: validates outputSchema and leaks nothing", async () => {
     // discipline: `false` explicitly, not absent.
     assert.equal(res.isError, false);
     assert.equal(verifySealOutputSchema.safeParse(res.structuredContent).success, true);
-    assert.equal(res.structuredContent.verdict, "verified");
-    assert.equal(res.structuredContent.sealValid, true);
-    // omitly#1588: the v1 label is in the structured result AND the text.
-    assert.equal(res.structuredContent.sealEraLabel, "classical-era seal (v1)");
+    assert.equal(res.structuredContent.outcome, "incomplete");
+    assert.equal(res.structuredContent.embeddedReport.verifierVerdict, "verified");
+    assert.equal(res.structuredContent.embeddedReport.sealValid, true);
+    assert.equal(res.structuredContent.seal.eraLabel, "classical-era seal (v1)");
     assert.match(res.content[0].text, /Seal format: classical-era seal \(v1\)/);
     assertNoLeak("verify_document", res);
   });
@@ -296,7 +305,7 @@ test("create_pdf: validates outputSchema and leaks nothing", async () => {
       name: "create_pdf",
       arguments: { outputPath, source: "# Hello\n\nNo PII here." },
     });
-    assert.equal(res.isError, undefined);
+    assert.ok(!res.isError);
     assert.equal(createPdfOutputSchema.safeParse(res.structuredContent).success, true);
     assert.equal(res.structuredContent.output, outputPath);
     assertNoLeak("create_pdf", res);
@@ -309,7 +318,8 @@ test("check_redaction: validates outputSchema and leaks nothing (dirty doc)", as
       name: "check_redaction",
       arguments: { pdfPath: docPath },
     });
-    assert.equal(res.isError, true);
+    // omitly#1857: a completed check with findings is a result, not a tool failure.
+    assert.equal(res.isError, false);
     assert.equal(checkRedactionOutputSchema.safeParse(res.structuredContent).success, true);
     assert.equal(res.structuredContent.clean, false);
     assert.equal(res.structuredContent.totalFindings, 3);
@@ -325,7 +335,7 @@ test("check_redaction: validates outputSchema and leaks nothing (clean doc)", as
       name: "check_redaction",
       arguments: { pdfPath: cleanPath },
     });
-    assert.equal(res.isError, undefined);
+    assert.equal(res.isError, false, "omitly#1857: a completed check says so explicitly");
     assert.equal(checkRedactionOutputSchema.safeParse(res.structuredContent).success, true);
     assert.equal(res.structuredContent.clean, true);
     assertNoLeak("check_redaction (clean)", res);

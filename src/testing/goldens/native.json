@@ -1,0 +1,2458 @@
+{
+ "engine": "omitly-redact (cargo build -p omitly-cli)",
+ "find": [
+  {
+   "pdf": "tests/fixtures/sample.pdf",
+   "reply": {
+    "clean": false,
+    "count": 3,
+    "coverage": {
+     "acroform_scanned": false,
+     "annotation_appearances_scanned": 0,
+     "attachments_scanned": false,
+     "form_xobjects_scanned": 0,
+     "metadata_scanned": true,
+     "not_scanned": [],
+     "pages_failed": [],
+     "pages_scanned": 2,
+     "pages_total": 2,
+     "prior_revisions_scanned": false,
+     "raster_only_pages": [],
+     "raster_pages": [],
+     "scan_complete": true
+    },
+    "inputSha256": "5fa54f4cac879f9e2ce75c9b7438cf9cedc3a81c3fdabf9b89958a94a41818cf",
+    "off_page": [],
+    "ok": true,
+    "regions": [
+     {
+      "height": 14.399999999999977,
+      "kind": "ssn",
+      "page": 0,
+      "preview": "•••-••-6789",
+      "under_redaction": false,
+      "width": 68.03999999999999,
+      "x": 203.384,
+      "y": 610.4
+     },
+     {
+      "height": 14.399999999999977,
+      "kind": "email",
+      "page": 0,
+      "preview": "••••.•••@••••••e.com",
+      "under_redaction": false,
+      "width": 129.756,
+      "x": 207.18799999999996,
+      "y": 588.4
+     },
+     {
+      "height": 14.399999999999977,
+      "kind": "card",
+      "page": 1,
+      "preview": "•••• •••• •••• 1111",
+      "under_redaction": false,
+      "width": 116.75999999999999,
+      "x": 150.04399999999998,
+      "y": 654.4
+     }
+    ],
+    "scan_complete": true,
+    "survivors": [],
+    "total_findings": 3
+   }
+  },
+  {
+   "pdf": "tests/fixtures/clean-text.pdf",
+   "reply": {
+    "clean": true,
+    "count": 0,
+    "coverage": {
+     "acroform_scanned": false,
+     "annotation_appearances_scanned": 0,
+     "attachments_scanned": false,
+     "form_xobjects_scanned": 0,
+     "metadata_scanned": true,
+     "not_scanned": [],
+     "pages_failed": [],
+     "pages_scanned": 1,
+     "pages_total": 1,
+     "prior_revisions_scanned": false,
+     "raster_only_pages": [],
+     "raster_pages": [],
+     "scan_complete": true
+    },
+    "inputSha256": "2d57a519f7c1b7fa9488838927b13b8a20a84e6f6b89847ca82d80024911c93f",
+    "off_page": [],
+    "ok": true,
+    "regions": [],
+    "scan_complete": true,
+    "survivors": [],
+    "total_findings": 0
+   }
+  },
+  {
+   "pdf": "tests/fixtures/covered-text.pdf",
+   "reply": {
+    "clean": false,
+    "count": 1,
+    "coverage": {
+     "acroform_scanned": false,
+     "annotation_appearances_scanned": 0,
+     "attachments_scanned": false,
+     "form_xobjects_scanned": 0,
+     "metadata_scanned": false,
+     "not_scanned": [],
+     "pages_failed": [],
+     "pages_scanned": 1,
+     "pages_total": 1,
+     "prior_revisions_scanned": false,
+     "raster_only_pages": [],
+     "raster_pages": [],
+     "scan_complete": true
+    },
+    "inputSha256": "70b7096a96efb0a0e6724f95ab71a125b6837ee3b7a5dba04e609b3e056c74d7",
+    "off_page": [],
+    "ok": true,
+    "regions": [
+     {
+      "height": 14.399999999999977,
+      "kind": "email",
+      "page": 0,
+      "preview": "••.••••@••••••e.com",
+      "under_redaction": true,
+      "width": 121.54800000000003,
+      "x": 171.364,
+      "y": 676.4
+     }
+    ],
+    "scan_complete": true,
+    "survivors": [
+     {
+      "height": 14.399999999999977,
+      "kind": "email",
+      "page": 0,
+      "preview": "•••• •••••• ••.••••@••••••e.com",
+      "width": 192.91200000000003,
+      "x": 100,
+      "y": 676.4
+     }
+    ],
+    "total_findings": 2
+   }
+  },
+  {
+   "pdf": "tests/fixtures/invisible-text.pdf",
+   "reply": {
+    "clean": true,
+    "count": 0,
+    "coverage": {
+     "acroform_scanned": false,
+     "annotation_appearances_scanned": 0,
+     "attachments_scanned": false,
+     "form_xobjects_scanned": 0,
+     "metadata_scanned": false,
+     "not_scanned": [],
+     "pages_failed": [],
+     "pages_scanned": 1,
+     "pages_total": 1,
+     "prior_revisions_scanned": false,
+     "raster_only_pages": [],
+     "raster_pages": [],
+     "scan_complete": true
+    },
+    "inputSha256": "8db7cced0b4e767abfca868ade1823dc824d7774f7afe6e78be566f9d3e77be3",
+    "off_page": [],
+    "ok": true,
+    "regions": [],
+    "scan_complete": true,
+    "survivors": [],
+    "total_findings": 0
+   }
+  },
+  {
+   "pdf": "tests/fixtures/encrypted-aes256-survivor.pdf",
+   "reply": {
+    "clean": true,
+    "count": 0,
+    "coverage": {
+     "acroform_scanned": false,
+     "annotation_appearances_scanned": 0,
+     "attachments_scanned": false,
+     "form_xobjects_scanned": 0,
+     "metadata_scanned": true,
+     "not_scanned": [
+      "1 embedded content stream(s) that failed to parse or could not be fully decoded",
+      "1 page(s) could not be fully checked for text surviving under a redaction mark (the content stream failed to decode, a cover could not be followed, or the characters under it could not be determined) — a redaction on this page is unproven, not confirmed clean",
+      "the file's structure (object streams, cross-reference data or stream lengths) did not read the same way twice, so some objects may not have been read: the file is encrypted and could not be opened (a password is needed), so none of it was read; object 1 is listed in the cross-reference table but could not be read; object 2 is listed in the cross-reference table but could not be read; object 3 is recorded as entry 0 of object stream 2, which does not hold it there; object 4 is recorded as entry 1 of object stream 2, which does not hold it there; and 4 more"
+     ],
+     "pages_failed": [
+      0
+     ],
+     "pages_scanned": 0,
+     "pages_total": 1,
+     "prior_revisions_scanned": false,
+     "raster_only_pages": [],
+     "raster_pages": [],
+     "scan_complete": false
+    },
+    "inputSha256": "893d7a20605f14c8033a4fe0e365ce2ed874e5e44c7883be74cc8742b03c5973",
+    "off_page": [],
+    "ok": true,
+    "regions": [],
+    "scan_complete": false,
+    "survivors": [],
+    "total_findings": 0
+   }
+  },
+  {
+   "pdf": "tests/fixtures/au-corpus/05-scanned-raster.pdf",
+   "reply": {
+    "clean": true,
+    "count": 0,
+    "coverage": {
+     "acroform_scanned": false,
+     "annotation_appearances_scanned": 0,
+     "attachments_scanned": false,
+     "form_xobjects_scanned": 0,
+     "metadata_scanned": true,
+     "not_scanned": [
+      "1 page(s) are effectively image-only (raster content, fewer than 100 extractable text characters) — this build never OCRs, so any text inside those images was not read"
+     ],
+     "pages_failed": [],
+     "pages_scanned": 1,
+     "pages_total": 1,
+     "prior_revisions_scanned": false,
+     "raster_only_pages": [
+      0
+     ],
+     "raster_pages": [
+      0
+     ],
+     "scan_complete": false
+    },
+    "inputSha256": "206cca71d6d9a967c38ce9279bd7c838720a3b2c7b1fc6cd760ac656b452fb42",
+    "off_page": [],
+    "ok": true,
+    "regions": [],
+    "scan_complete": false,
+    "survivors": [],
+    "total_findings": 0
+   }
+  },
+  {
+   "pdf": "tests/fixtures/au-corpus/07-incremental-update-prior-revision.pdf",
+   "reply": {
+    "clean": false,
+    "count": 0,
+    "coverage": {
+     "acroform_scanned": false,
+     "annotation_appearances_scanned": 0,
+     "attachments_scanned": false,
+     "form_xobjects_scanned": 0,
+     "metadata_scanned": true,
+     "not_scanned": [],
+     "pages_failed": [],
+     "pages_scanned": 1,
+     "pages_total": 1,
+     "prior_revisions_scanned": true,
+     "raster_only_pages": [],
+     "raster_pages": [],
+     "scan_complete": true
+    },
+    "inputSha256": "1d9b3f0ea205ea3d394a915eaf542370d52c259677acc10fd80b300b514595be",
+    "off_page": [
+     {
+      "kind": "tfn",
+      "preview": "••• ••• ••2 587",
+      "source": "prior-revision"
+     },
+     {
+      "kind": "bsb",
+      "preview": "••• ••1-050",
+      "source": "prior-revision"
+     },
+     {
+      "kind": "abn",
+      "preview": "••• •• ••• ••8 563",
+      "source": "prior-revision"
+     }
+    ],
+    "ok": true,
+    "regions": [],
+    "scan_complete": true,
+    "survivors": [],
+    "total_findings": 3
+   }
+  },
+  {
+   "pdf": "tests/fixtures/au-corpus/08-acroform-fields.pdf",
+   "reply": {
+    "clean": false,
+    "count": 0,
+    "coverage": {
+     "acroform_scanned": true,
+     "annotation_appearances_scanned": 6,
+     "attachments_scanned": false,
+     "form_xobjects_scanned": 0,
+     "metadata_scanned": true,
+     "not_scanned": [],
+     "pages_failed": [],
+     "pages_scanned": 1,
+     "pages_total": 1,
+     "prior_revisions_scanned": false,
+     "raster_only_pages": [],
+     "raster_pages": [],
+     "scan_complete": true
+    },
+    "inputSha256": "9a87efdb791701b0dd53f4d54ce512ba5eb54c75c68fb76ea4d78c04a6bc1843",
+    "off_page": [
+     {
+      "kind": "tfn",
+      "preview": "••• ••8 327",
+      "source": "form-field"
+     },
+     {
+      "kind": "abn",
+      "preview": "•• ••• ••8 787",
+      "source": "form-field"
+     },
+     {
+      "kind": "card",
+      "preview": "•••• •••• •••• 9655",
+      "source": "form-field"
+     },
+     {
+      "kind": "tfn",
+      "preview": "••• ••8 327",
+      "source": "annotation:page1"
+     },
+     {
+      "kind": "abn",
+      "preview": "•• ••• ••8 787",
+      "source": "annotation:page1"
+     },
+     {
+      "kind": "card",
+      "preview": "•••• •••• •••• 9655",
+      "source": "annotation:page1"
+     }
+    ],
+    "ok": true,
+    "regions": [],
+    "scan_complete": true,
+    "survivors": [],
+    "total_findings": 6
+   }
+  },
+  {
+   "pdf": "scripts/fixtures/leakcheck/form-xobject-under-box.pdf",
+   "reply": {
+    "clean": false,
+    "count": 0,
+    "coverage": {
+     "acroform_scanned": false,
+     "annotation_appearances_scanned": 0,
+     "attachments_scanned": false,
+     "form_xobjects_scanned": 1,
+     "metadata_scanned": false,
+     "not_scanned": [],
+     "pages_failed": [],
+     "pages_scanned": 1,
+     "pages_total": 1,
+     "prior_revisions_scanned": false,
+     "raster_only_pages": [],
+     "raster_pages": [],
+     "scan_complete": true
+    },
+    "inputSha256": "0d10068c9d2c433a159c22d3e53df0348b879f86f593742de4c1153437d8ef88",
+    "off_page": [
+     {
+      "kind": "email",
+      "preview": "•••••.••••@••••••e.com",
+      "source": "form-xobject:page1/X1"
+     },
+     {
+      "kind": "tfn",
+      "preview": "••• ••• ••6 782",
+      "source": "form-xobject:page1/X1"
+     },
+     {
+      "kind": "card",
+      "preview": "•••• •••• •••• 1111",
+      "source": "form-xobject:page1/X1"
+     },
+     {
+      "kind": "phone",
+      "preview": "•••• ••5 678",
+      "source": "form-xobject:page1/X1"
+     }
+    ],
+    "ok": true,
+    "regions": [],
+    "scan_complete": true,
+    "survivors": [
+     {
+      "height": 13.199999999999932,
+      "kind": "email",
+      "page": 0,
+      "preview": "••••••• •••••.••••@•••••••.••• ••• ••• ••• ••• •••• •••• •••• •••• •••• ••••• •••• ••5 678",
+      "width": 490.5559999999996,
+      "x": 50,
+      "y": 696.7
+     }
+    ],
+    "total_findings": 5
+   }
+  },
+  {
+   "pdf": "tests/fixtures/sample.pdf",
+   "regions": [
+    "au"
+   ],
+   "reply": {
+    "clean": false,
+    "count": 2,
+    "coverage": {
+     "acroform_scanned": false,
+     "annotation_appearances_scanned": 0,
+     "attachments_scanned": false,
+     "form_xobjects_scanned": 0,
+     "metadata_scanned": true,
+     "not_scanned": [],
+     "pages_failed": [],
+     "pages_scanned": 2,
+     "pages_total": 2,
+     "prior_revisions_scanned": false,
+     "raster_only_pages": [],
+     "raster_pages": [],
+     "scan_complete": true
+    },
+    "inputSha256": "5fa54f4cac879f9e2ce75c9b7438cf9cedc3a81c3fdabf9b89958a94a41818cf",
+    "off_page": [],
+    "ok": true,
+    "regions": [
+     {
+      "height": 14.399999999999977,
+      "kind": "email",
+      "page": 0,
+      "preview": "••••.•••@••••••e.com",
+      "under_redaction": false,
+      "width": 129.756,
+      "x": 207.18799999999996,
+      "y": 588.4
+     },
+     {
+      "height": 14.399999999999977,
+      "kind": "card",
+      "page": 1,
+      "preview": "•••• •••• •••• 1111",
+      "under_redaction": false,
+      "width": 116.75999999999999,
+      "x": 150.04399999999998,
+      "y": 654.4
+     }
+    ],
+    "scan_complete": true,
+    "survivors": [],
+    "total_findings": 3
+   }
+  },
+  {
+   "pdf": "tests/fixtures/sample.pdf",
+   "regions": [],
+   "reply": {
+    "clean": false,
+    "count": 2,
+    "coverage": {
+     "acroform_scanned": false,
+     "annotation_appearances_scanned": 0,
+     "attachments_scanned": false,
+     "form_xobjects_scanned": 0,
+     "metadata_scanned": true,
+     "not_scanned": [],
+     "pages_failed": [],
+     "pages_scanned": 2,
+     "pages_total": 2,
+     "prior_revisions_scanned": false,
+     "raster_only_pages": [],
+     "raster_pages": [],
+     "scan_complete": true
+    },
+    "inputSha256": "5fa54f4cac879f9e2ce75c9b7438cf9cedc3a81c3fdabf9b89958a94a41818cf",
+    "off_page": [],
+    "ok": true,
+    "regions": [
+     {
+      "height": 14.399999999999977,
+      "kind": "email",
+      "page": 0,
+      "preview": "••••.•••@••••••e.com",
+      "under_redaction": false,
+      "width": 129.756,
+      "x": 207.18799999999996,
+      "y": 588.4
+     },
+     {
+      "height": 14.399999999999977,
+      "kind": "card",
+      "page": 1,
+      "preview": "•••• •••• •••• 1111",
+      "under_redaction": false,
+      "width": 116.75999999999999,
+      "x": 150.04399999999998,
+      "y": 654.4
+     }
+    ],
+    "scan_complete": true,
+    "survivors": [],
+    "total_findings": 3
+   }
+  },
+  {
+   "pdf": "(redact_entities output of tests/fixtures/sample.pdf)",
+   "reply": {
+    "clean": true,
+    "count": 0,
+    "coverage": {
+     "acroform_scanned": false,
+     "annotation_appearances_scanned": 0,
+     "attachments_scanned": true,
+     "form_xobjects_scanned": 0,
+     "metadata_scanned": false,
+     "not_scanned": [],
+     "pages_failed": [],
+     "pages_scanned": 2,
+     "pages_total": 2,
+     "prior_revisions_scanned": false,
+     "raster_only_pages": [],
+     "raster_pages": [],
+     "scan_complete": true
+    },
+    "inputSha256": "581054744c7186ec1e82252a2eeb52c2c8057f24ba20170981868e6d2ec40550",
+    "off_page": [],
+    "ok": true,
+    "regions": [],
+    "scan_complete": true,
+    "survivors": [],
+    "total_findings": 0
+   }
+  },
+  {
+   "pdf": "(generated: tests/fixtures/covered-text.pdf plus a 66 MiB unreferenced stream)",
+   "reply": {
+    "clean": false,
+    "count": 1,
+    "coverage": {
+     "acroform_scanned": false,
+     "annotation_appearances_scanned": 0,
+     "attachments_scanned": false,
+     "form_xobjects_scanned": 0,
+     "metadata_scanned": true,
+     "not_scanned": [],
+     "pages_failed": [],
+     "pages_scanned": 1,
+     "pages_total": 1,
+     "prior_revisions_scanned": false,
+     "raster_only_pages": [],
+     "raster_pages": [],
+     "scan_complete": true
+    },
+    "inputSha256": "1452c37cc086e5b54537776a9beaacba1bde8a292c6c33c07f8c45dbb4c4cce3",
+    "off_page": [],
+    "ok": true,
+    "regions": [
+     {
+      "height": 14.399999999999977,
+      "kind": "email",
+      "page": 0,
+      "preview": "••.••••@••••••e.com",
+      "under_redaction": true,
+      "width": 121.54800000000003,
+      "x": 171.364,
+      "y": 676.4
+     }
+    ],
+    "scan_complete": true,
+    "survivors": [
+     {
+      "height": 14.399999999999977,
+      "kind": "email",
+      "page": 0,
+      "preview": "•••• •••••• ••.••••@••••••e.com",
+      "width": 192.91200000000003,
+      "x": 100,
+      "y": 676.4
+     }
+    ],
+    "total_findings": 2
+   }
+  }
+ ],
+ "check": [
+  {
+   "pdf": "tests/fixtures/sample.pdf",
+   "reply": {
+    "check": {
+     "blocking": false,
+     "reason_code": null,
+     "result": {
+      "blocking": false,
+      "canWrite": false,
+      "checked": [
+       {
+        "text": "No text found under any black or white box (2 pages)"
+       },
+       {
+        "text": "No hidden layers, embedded files or comments"
+       },
+       {
+        "text": "Single version: no earlier saves recoverable"
+       },
+       {
+        "text": "Page text readable on all 2 pages (no scanned pages)"
+       },
+       {
+        "text": "No scripts, automatic actions or page thumbnails"
+       },
+       {
+        "text": "Document properties and metadata read"
+       }
+      ],
+      "checkedAt": "2026-11-16T23:48:07Z",
+      "decisionChannel": "none",
+      "decisions": [],
+      "information": [
+       {
+        "text": "The file has document properties or metadata, such as an author or a title. A check does not remove them."
+       },
+       {
+        "pages": [
+         1,
+         2
+        ],
+        "text": "Sensitive-looking text is visible on pages 1 and 2 (3 values)."
+       }
+      ],
+      "notChecked": [
+       {
+        "text": "Bookmarks, tooltips, labels and alternate text: none in this file"
+       },
+       {
+        "text": "Form fields: none in this file"
+       },
+       {
+        "text": "Removed-text search: only applies to files Omitly redacted"
+       },
+       {
+        "text": "Detection profile: none was requested for this file"
+       },
+       {
+        "text": "Searchable text on scanned pages: none in this file"
+       },
+       {
+        "text": "Text inside images is not read: this check does no OCR."
+       },
+       {
+        "text": "Pictures under a box (a box drawn over a scanned image) are not checked."
+       }
+      ],
+      "omitlyVersion": "0.1.0",
+      "pagesRead": 2,
+      "pagesTotal": 2,
+      "problems": [],
+      "producer": null,
+      "reasons": [],
+      "review": [],
+      "sha256": "5fa54f4cac879f9e2ce75c9b7438cf9cedc3a81c3fdabf9b89958a94a41818cf",
+      "sizeBytes": 1634,
+      "state": "safe_to_send",
+      "summary": "Every mandatory check that applies to this file passed. 2 pages checked. 6 of the 15 checks did not apply to this file (below)."
+     },
+     "verdict": "safe_to_send"
+    },
+    "ok": true
+   }
+  },
+  {
+   "pdf": "tests/fixtures/clean-text.pdf",
+   "reply": {
+    "check": {
+     "blocking": false,
+     "reason_code": null,
+     "result": {
+      "blocking": false,
+      "canWrite": false,
+      "checked": [
+       {
+        "text": "No text found under any black or white box (1 page)"
+       },
+       {
+        "text": "No hidden layers, embedded files or comments"
+       },
+       {
+        "text": "Single version: no earlier saves recoverable"
+       },
+       {
+        "text": "Page text readable on the only page (no scanned pages)"
+       },
+       {
+        "text": "No scripts, automatic actions or page thumbnails"
+       },
+       {
+        "text": "Document properties and metadata read"
+       }
+      ],
+      "checkedAt": "2026-11-16T23:48:07Z",
+      "decisionChannel": "none",
+      "decisions": [],
+      "information": [
+       {
+        "text": "The file has document properties or metadata, such as an author or a title. A check does not remove them."
+       }
+      ],
+      "notChecked": [
+       {
+        "text": "Bookmarks, tooltips, labels and alternate text: none in this file"
+       },
+       {
+        "text": "Form fields: none in this file"
+       },
+       {
+        "text": "Removed-text search: only applies to files Omitly redacted"
+       },
+       {
+        "text": "Detection profile: none was requested for this file"
+       },
+       {
+        "text": "Searchable text on scanned pages: none in this file"
+       },
+       {
+        "text": "Text inside images is not read: this check does no OCR."
+       },
+       {
+        "text": "Pictures under a box (a box drawn over a scanned image) are not checked."
+       }
+      ],
+      "omitlyVersion": "0.1.0",
+      "pagesRead": 1,
+      "pagesTotal": 1,
+      "problems": [],
+      "producer": null,
+      "reasons": [],
+      "review": [],
+      "sha256": "2d57a519f7c1b7fa9488838927b13b8a20a84e6f6b89847ca82d80024911c93f",
+      "sizeBytes": 1587,
+      "state": "safe_to_send",
+      "summary": "Every mandatory check that applies to this file passed. 1 page checked. 6 of the 15 checks did not apply to this file (below)."
+     },
+     "verdict": "safe_to_send"
+    },
+    "ok": true
+   }
+  },
+  {
+   "pdf": "tests/fixtures/covered-text.pdf",
+   "reply": {
+    "check": {
+     "blocking": true,
+     "reason_code": null,
+     "result": {
+      "blocking": true,
+      "canWrite": false,
+      "checked": [
+       {
+        "text": "No hidden layers, embedded files or comments"
+       },
+       {
+        "text": "Single version: no earlier saves recoverable"
+       },
+       {
+        "text": "Page text readable on the only page (no scanned pages)"
+       },
+       {
+        "text": "No scripts, automatic actions or page thumbnails"
+       },
+       {
+        "text": "Document properties and metadata read"
+       }
+      ],
+      "checkedAt": "2026-11-16T23:48:07Z",
+      "decisionChannel": "none",
+      "decisions": [],
+      "information": [],
+      "notChecked": [
+       {
+        "text": "Bookmarks, tooltips, labels and alternate text: none in this file"
+       },
+       {
+        "text": "Form fields: none in this file"
+       },
+       {
+        "text": "Removed-text search: only applies to files Omitly redacted"
+       },
+       {
+        "text": "Detection profile: none was requested for this file"
+       },
+       {
+        "text": "Searchable text on scanned pages: none in this file"
+       },
+       {
+        "text": "Text inside images is not read: this check does no OCR."
+       },
+       {
+        "text": "Pictures under a box (a box drawn over a scanned image) are not checked."
+       }
+      ],
+      "omitlyVersion": "0.1.0",
+      "pagesRead": 1,
+      "pagesTotal": 1,
+      "problems": [
+       {
+        "pages": [
+         1
+        ],
+        "text": "Text is still in the file under a painted box on page 1. Anyone can copy it out."
+       }
+      ],
+      "producer": null,
+      "reasons": [],
+      "review": [],
+      "sha256": "70b7096a96efb0a0e6724f95ab71a125b6837ee3b7a5dba04e609b3e056c74d7",
+      "sizeBytes": 630,
+      "state": "needs_review",
+      "summary": "This file should not be sent. 1 check found content a reader can recover. 1 page checked."
+     },
+     "verdict": "needs_review"
+    },
+    "ok": true
+   }
+  },
+  {
+   "pdf": "tests/fixtures/invisible-text.pdf",
+   "reply": {
+    "check": {
+     "blocking": false,
+     "reason_code": null,
+     "result": {
+      "blocking": false,
+      "canWrite": false,
+      "checked": [
+       {
+        "text": "No text found under any black or white box (1 page)"
+       },
+       {
+        "text": "No hidden layers, embedded files or comments"
+       },
+       {
+        "text": "Single version: no earlier saves recoverable"
+       },
+       {
+        "text": "No scripts, automatic actions or page thumbnails"
+       },
+       {
+        "text": "Document properties and metadata read"
+       }
+      ],
+      "checkedAt": "2026-11-16T23:48:07Z",
+      "decisionChannel": "none",
+      "decisions": [],
+      "information": [],
+      "notChecked": [
+       {
+        "text": "Bookmarks, tooltips, labels and alternate text: none in this file"
+       },
+       {
+        "text": "Form fields: none in this file"
+       },
+       {
+        "text": "Removed-text search: only applies to files Omitly redacted"
+       },
+       {
+        "text": "Detection profile: none was requested for this file"
+       },
+       {
+        "text": "Searchable text on scanned pages: none in this file"
+       },
+       {
+        "text": "Text inside images is not read: this check does no OCR."
+       },
+       {
+        "text": "Pictures under a box (a box drawn over a scanned image) are not checked."
+       }
+      ],
+      "omitlyVersion": "0.1.0",
+      "pagesRead": 1,
+      "pagesTotal": 1,
+      "problems": [],
+      "producer": null,
+      "reasons": [],
+      "review": [
+       {
+        "pages": [
+         1
+        ],
+        "text": "The file has text on page 1 that is not shown and is not part of a scanned image. Anyone can copy it out. Select all the text to read it, or remove it, before sending."
+       }
+      ],
+      "sha256": "8db7cced0b4e767abfca868ade1823dc824d7774f7afe6e78be566f9d3e77be3",
+      "sizeBytes": 661,
+      "state": "needs_review",
+      "summary": "No problems found, but 1 item needs a person to look at it before this file is sent. 1 page checked."
+     },
+     "verdict": "needs_review"
+    },
+    "ok": true
+   }
+  },
+  {
+   "pdf": "tests/fixtures/encrypted-aes256-survivor.pdf",
+   "reply": {
+    "check": {
+     "blocking": false,
+     "reason_code": null,
+     "result": {
+      "blocking": false,
+      "canWrite": false,
+      "checked": [],
+      "checkedAt": "2026-11-16T23:48:07Z",
+      "decisions": [],
+      "information": [],
+      "notChecked": [
+       {
+        "text": "Text inside images is not read: this check does no OCR."
+       },
+       {
+        "text": "Pictures under a box (a box drawn over a scanned image) are not checked."
+       }
+      ],
+      "omitlyVersion": "0.1.0",
+      "pagesRead": 0,
+      "pagesTotal": 0,
+      "problems": [],
+      "producer": null,
+      "reasons": [
+       {
+        "text": "The file is password-protected (encrypted), so its contents could not be read. Remove the password (save a copy without one) and check that copy."
+       }
+      ],
+      "review": [],
+      "sha256": "893d7a20605f14c8033a4fe0e365ce2ed874e5e44c7883be74cc8742b03c5973",
+      "sizeBytes": 1766,
+      "state": "cannot_verify",
+      "summary": "Omitly could not complete every check, so it cannot say whether this file is safe to send."
+     },
+     "verdict": "cannot_verify"
+    },
+    "ok": true
+   }
+  },
+  {
+   "pdf": "tests/fixtures/au-corpus/05-scanned-raster.pdf",
+   "reply": {
+    "check": {
+     "blocking": false,
+     "reason_code": null,
+     "result": {
+      "blocking": false,
+      "canWrite": false,
+      "checked": [
+       {
+        "text": "No text found under any black or white box (1 page)"
+       },
+       {
+        "text": "No hidden layers, embedded files or comments"
+       },
+       {
+        "text": "Single version: no earlier saves recoverable"
+       },
+       {
+        "text": "No scripts, automatic actions or page thumbnails"
+       },
+       {
+        "text": "Document properties and metadata read"
+       }
+      ],
+      "checkedAt": "2026-11-16T23:48:07Z",
+      "decisionChannel": "none",
+      "decisions": [],
+      "information": [
+       {
+        "text": "The file has document properties or metadata, such as an author or a title. A check does not remove them."
+       }
+      ],
+      "notChecked": [
+       {
+        "text": "Bookmarks, tooltips, labels and alternate text: none in this file"
+       },
+       {
+        "text": "Form fields: none in this file"
+       },
+       {
+        "text": "Removed-text search: only applies to files Omitly redacted"
+       },
+       {
+        "text": "Detection profile: none was requested for this file"
+       },
+       {
+        "text": "Searchable text on scanned pages: none in this file"
+       },
+       {
+        "text": "Text inside images is not read: this check does no OCR."
+       },
+       {
+        "text": "Pictures under a box (a box drawn over a scanned image) are not checked."
+       }
+      ],
+      "omitlyVersion": "0.1.0",
+      "pagesRead": 1,
+      "pagesTotal": 1,
+      "problems": [],
+      "producer": null,
+      "reasons": [],
+      "review": [
+       {
+        "pages": [
+         1
+        ],
+        "text": "Page content is an image only on page 1, so any text there was not read."
+       }
+      ],
+      "sha256": "206cca71d6d9a967c38ce9279bd7c838720a3b2c7b1fc6cd760ac656b452fb42",
+      "sizeBytes": 7728,
+      "state": "needs_review",
+      "summary": "No problems found, but 1 item needs a person to look at it before this file is sent. 1 page checked."
+     },
+     "verdict": "needs_review"
+    },
+    "ok": true
+   }
+  },
+  {
+   "pdf": "tests/fixtures/au-corpus/07-incremental-update-prior-revision.pdf",
+   "reply": {
+    "check": {
+     "blocking": false,
+     "reason_code": null,
+     "result": {
+      "blocking": false,
+      "canWrite": false,
+      "checked": [
+       {
+        "text": "No text found under any black or white box (1 page)"
+       },
+       {
+        "text": "No hidden layers, embedded files or comments"
+       },
+       {
+        "text": "Page text readable on the only page (no scanned pages)"
+       },
+       {
+        "text": "No scripts, automatic actions or page thumbnails"
+       },
+       {
+        "text": "Document properties and metadata read"
+       }
+      ],
+      "checkedAt": "2026-11-16T23:48:08Z",
+      "decisionChannel": "none",
+      "decisions": [],
+      "information": [
+       {
+        "text": "The file has document properties or metadata, such as an author or a title. A check does not remove them."
+       }
+      ],
+      "notChecked": [
+       {
+        "text": "Bookmarks, tooltips, labels and alternate text: none in this file"
+       },
+       {
+        "text": "Form fields: none in this file"
+       },
+       {
+        "text": "Removed-text search: only applies to files Omitly redacted"
+       },
+       {
+        "text": "Detection profile: none was requested for this file"
+       },
+       {
+        "text": "Searchable text on scanned pages: none in this file"
+       },
+       {
+        "text": "Text inside images is not read: this check does no OCR."
+       },
+       {
+        "text": "Pictures under a box (a box drawn over a scanned image) are not checked."
+       }
+      ],
+      "omitlyVersion": "0.1.0",
+      "pagesRead": 1,
+      "pagesTotal": 1,
+      "problems": [],
+      "producer": null,
+      "reasons": [],
+      "review": [
+       {
+        "text": "The file keeps an earlier version of itself, which a recipient can recover."
+       }
+      ],
+      "sha256": "1d9b3f0ea205ea3d394a915eaf542370d52c259677acc10fd80b300b514595be",
+      "sizeBytes": 2017,
+      "state": "needs_review",
+      "summary": "No problems found, but 1 item needs a person to look at it before this file is sent. 1 page checked."
+     },
+     "verdict": "needs_review"
+    },
+    "ok": true
+   }
+  },
+  {
+   "pdf": "tests/fixtures/au-corpus/08-acroform-fields.pdf",
+   "reply": {
+    "check": {
+     "blocking": false,
+     "reason_code": null,
+     "result": {
+      "blocking": false,
+      "canWrite": false,
+      "checked": [
+       {
+        "text": "No text found under any black or white box (1 page)"
+       },
+       {
+        "text": "No hidden layers, embedded files or comments"
+       },
+       {
+        "text": "Page text readable on the only page (no scanned pages)"
+       },
+       {
+        "text": "No scripts, automatic actions or page thumbnails"
+       },
+       {
+        "text": "No bookmarks, tooltips, labels or alternate text need review"
+       },
+       {
+        "text": "Document properties and metadata read"
+       },
+       {
+        "text": "No form field holds a value that is not shown on a page"
+       }
+      ],
+      "checkedAt": "2026-11-16T23:48:08Z",
+      "decisionChannel": "none",
+      "decisions": [],
+      "information": [
+       {
+        "text": "The file has document properties or metadata, such as an author or a title. A check does not remove them."
+       }
+      ],
+      "notChecked": [
+       {
+        "text": "Removed-text search: only applies to files Omitly redacted"
+       },
+       {
+        "text": "Detection profile: none was requested for this file"
+       },
+       {
+        "text": "Searchable text on scanned pages: none in this file"
+       },
+       {
+        "text": "Text inside images is not read: this check does no OCR."
+       },
+       {
+        "text": "Pictures under a box (a box drawn over a scanned image) are not checked."
+       }
+      ],
+      "omitlyVersion": "0.1.0",
+      "pagesRead": 1,
+      "pagesTotal": 1,
+      "problems": [],
+      "producer": null,
+      "reasons": [],
+      "review": [
+       {
+        "text": "The file stores text that nothing in it uses or shows, usually left over from an earlier save, which a recipient can recover."
+       }
+      ],
+      "sha256": "9a87efdb791701b0dd53f4d54ce512ba5eb54c75c68fb76ea4d78c04a6bc1843",
+      "sizeBytes": 9238,
+      "state": "needs_review",
+      "summary": "No problems found, but 1 item needs a person to look at it before this file is sent. 1 page checked."
+     },
+     "verdict": "needs_review"
+    },
+    "ok": true
+   }
+  },
+  {
+   "pdf": "scripts/fixtures/leakcheck/form-xobject-under-box.pdf",
+   "reply": {
+    "check": {
+     "blocking": true,
+     "reason_code": null,
+     "result": {
+      "blocking": true,
+      "canWrite": false,
+      "checked": [
+       {
+        "text": "No hidden layers, embedded files or comments"
+       },
+       {
+        "text": "Single version: no earlier saves recoverable"
+       },
+       {
+        "text": "Page text readable on the only page (no scanned pages)"
+       },
+       {
+        "text": "No scripts, automatic actions or page thumbnails"
+       },
+       {
+        "text": "Document properties and metadata read"
+       }
+      ],
+      "checkedAt": "2026-11-16T23:48:08Z",
+      "decisionChannel": "none",
+      "decisions": [],
+      "information": [],
+      "notChecked": [
+       {
+        "text": "Bookmarks, tooltips, labels and alternate text: none in this file"
+       },
+       {
+        "text": "Form fields: none in this file"
+       },
+       {
+        "text": "Removed-text search: only applies to files Omitly redacted"
+       },
+       {
+        "text": "Detection profile: none was requested for this file"
+       },
+       {
+        "text": "Searchable text on scanned pages: none in this file"
+       },
+       {
+        "text": "Text inside images is not read: this check does no OCR."
+       },
+       {
+        "text": "Pictures under a box (a box drawn over a scanned image) are not checked."
+       }
+      ],
+      "omitlyVersion": "0.1.0",
+      "pagesRead": 1,
+      "pagesTotal": 1,
+      "problems": [
+       {
+        "pages": [
+         1
+        ],
+        "text": "Text is still in the file under a painted box on page 1. Anyone can copy it out."
+       }
+      ],
+      "producer": null,
+      "reasons": [],
+      "review": [],
+      "sha256": "0d10068c9d2c433a159c22d3e53df0348b879f86f593742de4c1153437d8ef88",
+      "sizeBytes": 892,
+      "state": "needs_review",
+      "summary": "This file should not be sent. 1 check found content a reader can recover. 1 page checked."
+     },
+     "verdict": "needs_review"
+    },
+    "ok": true
+   }
+  },
+  {
+   "pdf": "(redact_entities output of tests/fixtures/sample.pdf)",
+   "reply": {
+    "check": {
+     "blocking": false,
+     "reason_code": null,
+     "result": {
+      "blocking": false,
+      "canWrite": false,
+      "checked": [
+       {
+        "text": "No text found under any black or white box (2 pages)"
+       },
+       {
+        "text": "No hidden layers, embedded files or comments"
+       },
+       {
+        "text": "Single version: no earlier saves recoverable"
+       },
+       {
+        "text": "Page text readable on all 2 pages (no scanned pages)"
+       },
+       {
+        "text": "No scripts, automatic actions or page thumbnails"
+       },
+       {
+        "text": "Document properties and metadata read"
+       }
+      ],
+      "checkedAt": "2026-11-16T23:48:09Z",
+      "decisionChannel": "none",
+      "decisions": [],
+      "information": [
+       {
+        "text": "This file carries an Omitly report (omitly-audit.json) sealed with key 9a:f9:33:48:ce:c6:a6:d8:cf:1d:c1:d5:e7:48:f0:61. The report records: Safe to Send. A seal shows the file is unchanged since it was sealed, not who sealed it, so check that key is the sender's before relying on the report."
+       }
+      ],
+      "notChecked": [
+       {
+        "text": "Bookmarks, tooltips, labels and alternate text: none in this file"
+       },
+       {
+        "text": "Form fields: none in this file"
+       },
+       {
+        "text": "Removed-text search: only applies to files Omitly redacted"
+       },
+       {
+        "text": "Detection profile: none was requested for this file"
+       },
+       {
+        "text": "Searchable text on scanned pages: none in this file"
+       },
+       {
+        "text": "Text inside images is not read: this check does no OCR."
+       },
+       {
+        "text": "Pictures under a box (a box drawn over a scanned image) are not checked."
+       }
+      ],
+      "omitlyVersion": "0.1.0",
+      "pagesRead": 2,
+      "pagesTotal": 2,
+      "problems": [],
+      "producer": null,
+      "reasons": [],
+      "review": [],
+      "sha256": "581054744c7186ec1e82252a2eeb52c2c8057f24ba20170981868e6d2ec40550",
+      "sizeBytes": 32581,
+      "state": "safe_to_send",
+      "summary": "Every mandatory check that applies to this file passed. 2 pages checked. 6 of the 15 checks did not apply to this file (below)."
+     },
+     "verdict": "safe_to_send"
+    },
+    "ok": true
+   }
+  },
+  {
+   "pdf": "(generated: tests/fixtures/covered-text.pdf plus a 66 MiB unreferenced stream)",
+   "reply": {
+    "check": {
+     "blocking": false,
+     "reason_code": "input_too_large",
+     "result": {
+      "blocking": false,
+      "canWrite": false,
+      "checked": [],
+      "checkedAt": "2026-11-16T23:48:12Z",
+      "decisions": [],
+      "information": [],
+      "notChecked": [
+       {
+        "text": "Text inside images is not read: this check does no OCR."
+       },
+       {
+        "text": "Pictures under a box (a box drawn over a scanned image) are not checked."
+       }
+      ],
+      "omitlyVersion": "0.1.0",
+      "pagesRead": 0,
+      "pagesTotal": 0,
+      "problems": [],
+      "producer": null,
+      "reasons": [
+       {
+        "text": "The file is larger than this checker accepts, so it was not read."
+       }
+      ],
+      "review": [],
+      "sha256": "",
+      "sizeBytes": 67108865,
+      "state": "cannot_verify",
+      "summary": "Omitly could not complete every check, so it cannot say whether this file is safe to send."
+     },
+     "verdict": "cannot_verify"
+    },
+    "ok": true
+   }
+  }
+ ],
+ "locate_text": [
+  {
+   "pdf": "tests/fixtures/sample.pdf",
+   "texts": [
+    "Statement"
+   ],
+   "reply": {
+    "count": 0,
+    "inputSha256": "5fa54f4cac879f9e2ce75c9b7438cf9cedc3a81c3fdabf9b89958a94a41818cf",
+    "ok": true,
+    "regions": []
+   }
+  }
+ ],
+ "verify_seal": [
+  {
+   "pdf": "docs/test-vectors/positive/clean-sealed.pdf",
+   "reply": {
+    "allPassed": true,
+    "decisionChannel": null,
+    "inputSha256": "003c3007ce48d69bca4b7d362b48dfd0adc8a18285d6122de83d7c54e740aef2",
+    "legacySchema": true,
+    "legacyUnboundVerdict": true,
+    "licenseProvenance": null,
+    "metadataScrubbed": true,
+    "ok": true,
+    "omitlyVersion": "2.0.0",
+    "outputFilename": "clean-sealed.pdf",
+    "outputSha256": "003c3007ce48d69bca4b7d362b48dfd0adc8a18285d6122de83d7c54e740aef2",
+    "pageCount": 1,
+    "regionCount": 1,
+    "reportSchema": "omitly.audit/v1",
+    "sealEraLabel": "classical-era seal (v1)",
+    "sealFingerprint": "fe:81:2c:12:f3:ab:4c:e6:ac:5d:b6:9a:c3:52:f9:06",
+    "sealValid": true,
+    "sourceFilename": "fixtures/sample.pdf",
+    "verdict": "verified",
+    "warnings": [
+     "CAUTION: this file was sealed by a build predating the omitly#506 sign-path gate — a valid seal here proves integrity since sealing, not that the verdict describes this content"
+    ]
+   }
+  },
+  {
+   "pdf": "docs/test-vectors/positive/seal-at-boundary.pdf",
+   "reply": {
+    "allPassed": null,
+    "inputSha256": null,
+    "legacyUnboundVerdict": null,
+    "licenseProvenance": null,
+    "metadataScrubbed": null,
+    "ok": true,
+    "omitlyVersion": null,
+    "outputFilename": null,
+    "outputSha256": null,
+    "pageCount": null,
+    "regionCount": null,
+    "sealEraLabel": "classical-era seal (v1)",
+    "sealFingerprint": "fe:81:2c:12:f3:ab:4c:e6:ac:5d:b6:9a:c3:52:f9:06",
+    "sealValid": true,
+    "sourceFilename": null,
+    "verdict": "no_report",
+    "warnings": null
+   }
+  },
+  {
+   "pdf": "docs/test-vectors/compat/v3.2.0.pdf",
+   "reply": {
+    "allPassed": null,
+    "auditV2Overall": null,
+    "auditV2Recognized": true,
+    "auditV2SealValid": true,
+    "auditV2ValidationError": "missing required registry check",
+    "blocking": false,
+    "decisionChannel": null,
+    "detectionProfile": null,
+    "inputSha256": null,
+    "legacyUnboundVerdict": null,
+    "licenseProvenance": null,
+    "metadataScrubbed": null,
+    "ok": true,
+    "omitlyVersion": null,
+    "outputFilename": null,
+    "outputSha256": null,
+    "pageCount": null,
+    "regionCount": null,
+    "reportSchema": "omitly.audit/v2",
+    "result": {
+     "blocking": false,
+     "canWrite": false,
+     "checked": [],
+     "checkedAt": "",
+     "decisions": [],
+     "information": [],
+     "notChecked": [
+      {
+       "text": "Verify does not re-run the checks. It confirms the file is unchanged since it was sealed and shows what the sealed report records."
+      }
+     ],
+     "omitlyVersion": "",
+     "pagesRead": 0,
+     "pagesTotal": 0,
+     "problems": [],
+     "producer": null,
+     "reasons": [
+      {
+       "text": "The report sealed into this file is not one this version of Omitly can verify, or it does not match the file."
+      }
+     ],
+     "review": [],
+     "sha256": "94fa97b28145b1792b5dd85c9ac66d4f22744e1ff290d2cb1b94908de5b17f3c",
+     "sizeBytes": 13107,
+     "state": "cannot_verify",
+     "summary": "Omitly could not verify the report sealed into this file, so it cannot say whether this file is safe to send."
+    },
+    "schemaSupported": false,
+    "sealEraLabel": "classical-era seal (v1)",
+    "sealFingerprint": null,
+    "sealKeyKind": null,
+    "sealRemoved": false,
+    "sealValid": null,
+    "sessionRecord": null,
+    "sourceFilename": null,
+    "userVerdict": "cannot_verify",
+    "verdict": "unsupported_schema",
+    "warnings": [
+     "unsupported audit report schema \"omitly.audit/v2\"; no report claims were trusted"
+    ]
+   }
+  },
+  {
+   "pdf": "docs/test-vectors/compat/v5.3.0.pdf",
+   "reply": {
+    "allPassed": null,
+    "auditV2Overall": "pass",
+    "auditV2Recognized": true,
+    "auditV2SealValid": true,
+    "auditV2ValidationError": null,
+    "blocking": false,
+    "decisionChannel": "cli",
+    "detectionProfile": {
+     "content_sha256": "7c8b435d7a44f801a102681a7e5b7e50ae90126119e319fbca00e230b7a9a4f5",
+     "recognised": {
+      "id": "omitly.detector.builtin-all-regions",
+      "name": "Omitly built-in detector (all regions)",
+      "revision": 1
+     }
+    },
+    "inputSha256": null,
+    "legacyUnboundVerdict": null,
+    "licenseProvenance": null,
+    "metadataScrubbed": null,
+    "ok": true,
+    "omitlyVersion": null,
+    "outputFilename": null,
+    "outputSha256": null,
+    "pageCount": null,
+    "policyEpoch": 2,
+    "regionCount": null,
+    "reportSchema": "omitly.audit/v2",
+    "result": {
+     "blocking": false,
+     "canWrite": false,
+     "checked": [
+      {
+       "text": "No text found under any black or white box (2 pages)"
+      },
+      {
+       "text": "No hidden layers, embedded files or comments"
+      },
+      {
+       "text": "Single version: no earlier saves recoverable"
+      },
+      {
+       "text": "Page text readable on all 2 pages (no scanned pages)"
+      },
+      {
+       "text": "No scripts, automatic actions or page thumbnails"
+      },
+      {
+       "text": "Document properties and metadata read"
+      },
+      {
+       "text": "Nothing remains under the areas Omitly redacted, and the removed text was not found"
+      },
+      {
+       "text": "Omitly's detector found no identifiers it recognises in the page text"
+      }
+     ],
+     "checkedAt": "2026-11-04T01:19:58.350019Z",
+     "decidedBy": [
+      {
+       "text": "Decided by: not recorded. The Omitly engine was run directly from the command line."
+      },
+      {
+       "text": "This is what the sealed report records. It does not prove who made the decision."
+      }
+     ],
+     "decisionChannel": "cli",
+     "decisions": [],
+     "detectionProfile": [
+      {
+       "text": "Detection profile: Omitly built-in detector (all regions), revision 1."
+      },
+      {
+       "text": "Profile content SHA-256: 7c8b435d7a44f801a102681a7e5b7e50ae90126119e319fbca00e230b7a9a4f5"
+      }
+     ],
+     "information": [],
+     "notChecked": [
+      {
+       "text": "Verify does not re-run the checks. It confirms the file is unchanged since it was sealed and shows what the sealed report records."
+      }
+     ],
+     "omitlyVersion": "0.1.0",
+     "pagesRead": 2,
+     "pagesTotal": 2,
+     "problems": [],
+     "producer": null,
+     "reasons": [],
+     "review": [],
+     "sealKey": [
+      {
+       "text": "Sealed with a one-time key: there is no known fingerprint to compare it with."
+      }
+     ],
+     "sha256": "f197d867f17baea549812a5875fafb45a8a20dcff23fc1fac282218888f185e9",
+     "sizeBytes": 32265,
+     "state": "safe_to_send",
+     "summary": "The sealed report records that every check that applies to this file passed, and the file is unchanged since it was sealed. What was and was not checked is listed below."
+    },
+    "schemaSupported": false,
+    "sealExcludesSignatureValue": false,
+    "sealFingerprint": null,
+    "sealKeyKind": "one_time",
+    "sealLegs": [
+     {
+      "alg_id": 1,
+      "result": "valid"
+     },
+     {
+      "alg_id": 2,
+      "result": "valid"
+     }
+    ],
+    "sealReason": null,
+    "sealRemoved": false,
+    "sealValid": null,
+    "sealVerdict": "valid",
+    "sealVersion": "v2",
+    "sealWarnings": [],
+    "sessionRecord": {
+     "finalisation": {
+      "detection_profile_sha256": "7c8b435d7a44f801a102681a7e5b7e50ae90126119e319fbca00e230b7a9a4f5",
+      "region_emptiness": "pass",
+      "removed_byte_survivor": "pass",
+      "removed_content": "not_found"
+     },
+     "operations": [
+      {
+       "at": "2026-11-04T01:19:58.456Z",
+       "op": "redact"
+      },
+      {
+       "at": "2026-11-04T01:19:58.456Z",
+       "op": "verify_regions"
+      },
+      {
+       "at": "2026-11-04T01:19:58.515Z",
+       "op": "inspect"
+      },
+      {
+       "at": "2026-11-04T01:19:58.515Z",
+       "op": "detector_rescan"
+      },
+      {
+       "at": "2026-11-04T01:19:58.516Z",
+       "op": "build_report"
+      },
+      {
+       "op": "seal"
+      }
+     ]
+    },
+    "sourceFilename": null,
+    "userVerdict": "safe_to_send",
+    "verdict": "unsupported_schema",
+    "warnings": [
+     "unsupported audit report schema \"omitly.audit/v2\"; no report claims were trusted"
+    ]
+   }
+  },
+  {
+   "pdf": "docs/test-vectors/negative/stripped-seal.pdf",
+   "reply": {
+    "allPassed": null,
+    "inputSha256": null,
+    "legacyUnboundVerdict": false,
+    "licenseProvenance": null,
+    "metadataScrubbed": null,
+    "ok": true,
+    "omitlyVersion": "2.0.0",
+    "outputFilename": null,
+    "outputSha256": null,
+    "pageCount": null,
+    "regionCount": null,
+    "sealFingerprint": null,
+    "sealRemoved": true,
+    "sealValid": false,
+    "sourceFilename": null,
+    "verdict": "seal_invalid",
+    "warnings": null
+   }
+  },
+  {
+   "pdf": "docs/test-vectors/negative/tampered-content.pdf",
+   "reply": {
+    "allPassed": null,
+    "inputSha256": null,
+    "legacyUnboundVerdict": false,
+    "licenseProvenance": null,
+    "metadataScrubbed": null,
+    "ok": true,
+    "omitlyVersion": "2.0.0",
+    "outputFilename": null,
+    "outputSha256": null,
+    "pageCount": null,
+    "regionCount": null,
+    "sealEraLabel": "classical-era seal (v1)",
+    "sealFingerprint": "fe:81:2c:12:f3:ab:4c:e6:ac:5d:b6:9a:c3:52:f9:06",
+    "sealRemoved": false,
+    "sealValid": false,
+    "sourceFilename": null,
+    "verdict": "seal_invalid",
+    "warnings": null
+   }
+  },
+  {
+   "pdf": "docs/test-vectors/negative/forged-signature.pdf",
+   "reply": {
+    "allPassed": null,
+    "inputSha256": null,
+    "legacyUnboundVerdict": false,
+    "licenseProvenance": null,
+    "metadataScrubbed": null,
+    "ok": true,
+    "omitlyVersion": "2.0.0",
+    "outputFilename": null,
+    "outputSha256": null,
+    "pageCount": null,
+    "regionCount": null,
+    "sealEraLabel": "classical-era seal (v1)",
+    "sealFingerprint": "fe:81:2c:12:f3:ab:4c:e6:ac:5d:b6:9a:c3:52:f9:06",
+    "sealRemoved": false,
+    "sealValid": false,
+    "sourceFilename": null,
+    "verdict": "seal_invalid",
+    "warnings": null
+   }
+  },
+  {
+   "pdf": "docs/test-vectors/negative/corrupt-audit-json.pdf",
+   "reply": {
+    "allPassed": null,
+    "inputSha256": null,
+    "licenseProvenance": null,
+    "metadataScrubbed": null,
+    "ok": true,
+    "outputFilename": null,
+    "outputSha256": null,
+    "pageCount": null,
+    "parseError": "parse audit report envelope: key must be a string at line 1 column 3",
+    "regionCount": null,
+    "sealEraLabel": "classical-era seal (v1)",
+    "sealFingerprint": "fe:81:2c:12:f3:ab:4c:e6:ac:5d:b6:9a:c3:52:f9:06",
+    "sealValid": true,
+    "sourceFilename": null,
+    "verdict": "report_unparseable",
+    "warnings": null
+   }
+  },
+  {
+   "pdf": "tests/fixtures/sample.pdf",
+   "reply": {
+    "allPassed": null,
+    "inputSha256": null,
+    "legacyUnboundVerdict": null,
+    "licenseProvenance": null,
+    "metadataScrubbed": null,
+    "ok": true,
+    "omitlyVersion": null,
+    "outputFilename": null,
+    "outputSha256": null,
+    "pageCount": null,
+    "regionCount": null,
+    "sealFingerprint": null,
+    "sealValid": false,
+    "sourceFilename": null,
+    "verdict": "no_report",
+    "warnings": null
+   }
+  },
+  {
+   "pdf": "(redact_entities output of tests/fixtures/sample.pdf)",
+   "reply": {
+    "allPassed": null,
+    "auditV2Overall": "pass",
+    "auditV2Recognized": true,
+    "auditV2SealValid": true,
+    "auditV2ValidationError": null,
+    "blocking": false,
+    "decisionChannel": "cli",
+    "detectionProfile": {
+     "content_sha256": "7c8b435d7a44f801a102681a7e5b7e50ae90126119e319fbca00e230b7a9a4f5",
+     "recognised": {
+      "id": "omitly.detector.builtin-all-regions",
+      "name": "Omitly built-in detector (all regions)",
+      "revision": 1
+     }
+    },
+    "inputSha256": null,
+    "legacyUnboundVerdict": null,
+    "licenseProvenance": null,
+    "metadataScrubbed": null,
+    "ok": true,
+    "omitlyVersion": null,
+    "outputFilename": null,
+    "outputSha256": null,
+    "pageCount": null,
+    "policyEpoch": 2,
+    "regionCount": null,
+    "reportSchema": "omitly.audit/v2",
+    "result": {
+     "blocking": false,
+     "canWrite": false,
+     "checked": [
+      {
+       "text": "No text found under any black or white box (2 pages)"
+      },
+      {
+       "text": "No hidden layers, embedded files or comments"
+      },
+      {
+       "text": "Single version: no earlier saves recoverable"
+      },
+      {
+       "text": "Page text readable on all 2 pages (no scanned pages)"
+      },
+      {
+       "text": "No scripts, automatic actions or page thumbnails"
+      },
+      {
+       "text": "Document properties and metadata read"
+      },
+      {
+       "text": "Nothing remains under the areas Omitly redacted, and the removed text was not found"
+      },
+      {
+       "text": "Omitly's detector found no identifiers it recognises in the page text"
+      }
+     ],
+     "checkedAt": "2026-11-16T23:48:08.548554Z",
+     "decidedBy": [
+      {
+       "text": "Decided by: not recorded. The Omitly engine was run directly from the command line."
+      },
+      {
+       "text": "This is what the sealed report records. It does not prove who made the decision."
+      }
+     ],
+     "decisionChannel": "cli",
+     "decisions": [],
+     "detectionProfile": [
+      {
+       "text": "Detection profile: Omitly built-in detector (all regions), revision 1."
+      },
+      {
+       "text": "Profile content SHA-256: 7c8b435d7a44f801a102681a7e5b7e50ae90126119e319fbca00e230b7a9a4f5"
+      }
+     ],
+     "information": [],
+     "notChecked": [
+      {
+       "text": "Verify does not re-run the checks. It confirms the file is unchanged since it was sealed and shows what the sealed report records."
+      }
+     ],
+     "omitlyVersion": "0.1.0",
+     "pagesRead": 2,
+     "pagesTotal": 2,
+     "problems": [],
+     "producer": null,
+     "reasons": [],
+     "review": [],
+     "sealKey": [
+      {
+       "text": "Sealed with a one-time key: there is no known fingerprint to compare it with."
+      }
+     ],
+     "sha256": "581054744c7186ec1e82252a2eeb52c2c8057f24ba20170981868e6d2ec40550",
+     "sizeBytes": 32581,
+     "state": "safe_to_send",
+     "summary": "The sealed report records that every check that applies to this file passed, and the file is unchanged since it was sealed. What was and was not checked is listed below."
+    },
+    "schemaSupported": false,
+    "sealExcludesSignatureValue": false,
+    "sealFingerprint": null,
+    "sealKeyKind": "one_time",
+    "sealLegs": [
+     {
+      "alg_id": 1,
+      "result": "valid"
+     },
+     {
+      "alg_id": 2,
+      "result": "valid"
+     }
+    ],
+    "sealReason": null,
+    "sealRemoved": false,
+    "sealValid": null,
+    "sealVerdict": "valid",
+    "sealVersion": "v2",
+    "sealWarnings": [],
+    "sessionRecord": {
+     "finalisation": {
+      "detection_profile_sha256": "7c8b435d7a44f801a102681a7e5b7e50ae90126119e319fbca00e230b7a9a4f5",
+      "region_emptiness": "pass",
+      "removed_byte_survivor": "pass",
+      "removed_content": "not_found"
+     },
+     "operations": [
+      {
+       "at": "2026-11-16T23:48:08.658Z",
+       "op": "redact"
+      },
+      {
+       "at": "2026-11-16T23:48:08.658Z",
+       "op": "verify_regions"
+      },
+      {
+       "at": "2026-11-16T23:48:08.693Z",
+       "op": "inspect"
+      },
+      {
+       "at": "2026-11-16T23:48:08.693Z",
+       "op": "detector_rescan"
+      },
+      {
+       "at": "2026-11-16T23:48:08.694Z",
+       "op": "build_report"
+      },
+      {
+       "op": "seal"
+      }
+     ]
+    },
+    "sourceFilename": null,
+    "userVerdict": "safe_to_send",
+    "verdict": "unsupported_schema",
+    "warnings": [
+     "unsupported audit report schema \"omitly.audit/v2\"; no report claims were trusted"
+    ]
+   }
+  }
+ ],
+ "verify": [
+  {
+   "pdf": "(redact_entities output of tests/fixtures/sample.pdf)",
+   "reply": {
+    "disclosures": [],
+    "hiddenContent": [
+     {
+      "class": "thumbnails",
+      "verification": {
+       "result": "pass"
+      }
+     },
+     {
+      "class": "document-actions",
+      "verification": {
+       "result": "pass"
+      }
+     },
+     {
+      "class": "embedded-files",
+      "verification": {
+       "result": "pass"
+      }
+     },
+     {
+      "class": "incremental-revisions",
+      "verification": {
+       "result": "pass"
+      }
+     },
+     {
+      "class": "hidden-layers",
+      "verification": {
+       "result": "pass"
+      }
+     },
+     {
+      "class": "comment-annotations",
+      "verification": {
+       "result": "pass"
+      }
+     },
+     {
+      "class": "signature-identity",
+      "verification": {
+       "result": "pass"
+      }
+     },
+     {
+      "class": "semantic-text",
+      "verification": {
+       "result": "pass"
+      }
+     },
+     {
+      "class": "labels",
+      "verification": {
+       "result": "pass"
+      }
+     },
+     {
+      "class": "redacted-text-in-strings",
+      "verification": {
+       "result": "pass"
+      }
+     }
+    ],
+    "license": "trial",
+    "metadataScrubbed": true,
+    "ok": true,
+    "regions": [
+     {
+      "page": 0,
+      "reason": "PII.SSN",
+      "verification": {
+       "result": "pass"
+      }
+     },
+     {
+      "page": 0,
+      "reason": "PII.EMAIL",
+      "verification": {
+       "result": "pass"
+      }
+     },
+     {
+      "page": 1,
+      "reason": "PII.CARD",
+      "verification": {
+       "result": "pass"
+      }
+     }
+    ],
+    "scan_performed": false,
+    "verdict": "pass",
+    "warnings": [
+     "Marked as evaluation output. The redaction and verification are complete; activate or renew a licence for unmarked audit output."
+    ]
+   }
+  },
+  {
+   "pdf": "(tests/fixtures/sample.pdf with the sidecar of its redaction)",
+   "reply": {
+    "disclosures": [],
+    "hiddenContent": [
+     {
+      "class": "thumbnails",
+      "verification": {
+       "result": "pass"
+      }
+     },
+     {
+      "class": "document-actions",
+      "verification": {
+       "result": "pass"
+      }
+     },
+     {
+      "class": "embedded-files",
+      "verification": {
+       "result": "pass"
+      }
+     },
+     {
+      "class": "incremental-revisions",
+      "verification": {
+       "result": "pass"
+      }
+     },
+     {
+      "class": "hidden-layers",
+      "verification": {
+       "result": "pass"
+      }
+     },
+     {
+      "class": "comment-annotations",
+      "verification": {
+       "result": "pass"
+      }
+     },
+     {
+      "class": "signature-identity",
+      "verification": {
+       "result": "pass"
+      }
+     },
+     {
+      "class": "semantic-text",
+      "verification": {
+       "result": "pass"
+      }
+     },
+     {
+      "class": "labels",
+      "verification": {
+       "result": "pass"
+      }
+     },
+     {
+      "class": "redacted-text-in-strings",
+      "verification": {
+       "result": "pass"
+      }
+     }
+    ],
+    "license": "trial",
+    "metadataScrubbed": false,
+    "ok": true,
+    "regions": [
+     {
+      "page": 0,
+      "reason": "PII.SSN",
+      "verification": {
+       "detail": "extractable text renders into the region (page content: Tj @op 46); extractable text renders into the region (page content: Tj @op 46); extractable text renders into the region (page content: Tj @op 46); extractable text renders into the region (page content: Tj @op 46); extractable text renders into the region (page content: Tj @op 46); extractable text renders into the region (page content: Tj @op 46); extractable text renders into the region (page content: Tj @op 46); extractable text renders into the region (page content: Tj @op 46) (+4 more)",
+       "result": "fail"
+      }
+     },
+     {
+      "page": 0,
+      "reason": "PII.EMAIL",
+      "verification": {
+       "detail": "extractable text renders into the region (page content: Tj @op 56); extractable text renders into the region (page content: Tj @op 56); extractable text renders into the region (page content: Tj @op 56); extractable text renders into the region (page content: Tj @op 56); extractable text renders into the region (page content: Tj @op 56); extractable text renders into the region (page content: Tj @op 56); extractable text renders into the region (page content: Tj @op 56); extractable text renders into the region (page content: Tj @op 56) (+13 more)",
+       "result": "fail"
+      }
+     },
+     {
+      "page": 1,
+      "reason": "PII.CARD",
+      "verification": {
+       "detail": "extractable text renders into the region (page content: Tj @op 26); extractable text renders into the region (page content: Tj @op 26); extractable text renders into the region (page content: Tj @op 26); extractable text renders into the region (page content: Tj @op 26); extractable text renders into the region (page content: Tj @op 26); extractable text renders into the region (page content: Tj @op 26); extractable text renders into the region (page content: Tj @op 26); extractable text renders into the region (page content: Tj @op 26) (+12 more)",
+       "result": "fail"
+      }
+     }
+    ],
+    "scan_performed": false,
+    "verdict": "fail",
+    "warnings": [
+     "Marked as evaluation output. The redaction and verification are complete; activate or renew a licence for unmarked audit output."
+    ]
+   }
+  }
+ ],
+ "redact_entities": [
+  {
+   "pdf": "tests/fixtures/sample.pdf",
+   "reply": {
+    "audit": {
+     "auditSchema": "omitly.audit/v2",
+     "auditV2Overall": "pass",
+     "blocking": false,
+     "decisionChannel": "cli",
+     "disclosures": [],
+     "license": "trial",
+     "licensedTo": null,
+     "metadataScrubbed": true,
+     "regions": [
+      {
+       "bbox": {
+        "height": 14.399999999999977,
+        "width": 68.03999999999999,
+        "x": 203.384,
+        "y": 610.4
+       },
+       "page": 0,
+       "reason_code": "PII.SSN",
+       "timestamp": "2026-11-16T23:48:08.548554Z",
+       "verification": {
+        "result": "pass"
+       }
+      },
+      {
+       "bbox": {
+        "height": 14.399999999999977,
+        "width": 129.756,
+        "x": 207.18799999999996,
+        "y": 588.4
+       },
+       "page": 0,
+       "reason_code": "PII.EMAIL",
+       "timestamp": "2026-11-16T23:48:08.548554Z",
+       "verification": {
+        "result": "pass"
+       }
+      },
+      {
+       "bbox": {
+        "height": 14.399999999999977,
+        "width": 116.75999999999999,
+        "x": 150.04399999999998,
+        "y": 654.4
+       },
+       "page": 1,
+       "reason_code": "PII.CARD",
+       "timestamp": "2026-11-16T23:48:08.548554Z",
+       "verification": {
+        "result": "pass"
+       }
+      }
+     ],
+     "result": {
+      "blocking": false,
+      "canWrite": false,
+      "checked": [
+       {
+        "text": "No text found under any black or white box (2 pages)"
+       },
+       {
+        "text": "No hidden layers, embedded files or comments"
+       },
+       {
+        "text": "Single version: no earlier saves recoverable"
+       },
+       {
+        "text": "Page text readable on all 2 pages (no scanned pages)"
+       },
+       {
+        "text": "No scripts, automatic actions or page thumbnails"
+       },
+       {
+        "text": "Document properties and metadata read"
+       },
+       {
+        "text": "Nothing remains under the areas Omitly redacted, and the removed text was not found"
+       },
+       {
+        "text": "Omitly's detector found no identifiers it recognises in the page text"
+       }
+      ],
+      "checkedAt": "2026-11-16T23:48:08.548554Z",
+      "decidedBy": [
+       {
+        "text": "Decided by: not recorded. The Omitly engine was run directly from the command line."
+       },
+       {
+        "text": "This is what the sealed report records. It does not prove who made the decision."
+       }
+      ],
+      "decisionChannel": "cli",
+      "decisions": [],
+      "detectionProfile": [
+       {
+        "text": "Detection profile: Omitly built-in detector (all regions), revision 1."
+       },
+       {
+        "text": "Profile content SHA-256: 7c8b435d7a44f801a102681a7e5b7e50ae90126119e319fbca00e230b7a9a4f5"
+       }
+      ],
+      "information": [],
+      "notChecked": [
+       {
+        "text": "Bookmarks, tooltips, labels and alternate text: none in this file"
+       },
+       {
+        "text": "Form fields: none in this file"
+       },
+       {
+        "text": "Searchable text on scanned pages: none in this file"
+       },
+       {
+        "text": "Text inside images is not read: this check does no OCR."
+       },
+       {
+        "text": "Pictures under a box (a box drawn over a scanned image) are not checked."
+       }
+      ],
+      "omitlyVersion": "0.1.0",
+      "pagesRead": 2,
+      "pagesTotal": 2,
+      "problems": [],
+      "producer": null,
+      "reasons": [],
+      "review": [],
+      "sealKey": [
+       {
+        "text": "Sealed with a one-time key: there is no known fingerprint to compare it with."
+       }
+      ],
+      "sha256": "581054744c7186ec1e82252a2eeb52c2c8057f24ba20170981868e6d2ec40550",
+      "sizeBytes": 32581,
+      "state": "safe_to_send",
+      "summary": "Every mandatory check that applies to this file passed. 2 pages checked. 3 of the 15 checks did not apply to this file (below)."
+     },
+     "sealFingerprint": "9a:f9:33:48:ce:c6:a6:d8:cf:1d:c1:d5:e7:48:f0:61",
+     "userVerdict": "safe_to_send",
+     "verdict": "pass",
+     "warnings": [
+      "Marked as evaluation output. The redaction and verification are complete; activate or renew a licence for unmarked audit output."
+     ]
+    },
+    "auditLogPath": "<output>.audit.json",
+    "ok": true,
+    "output": "<output>",
+    "redacted": [
+     {
+      "kind": "ssn",
+      "page": 0,
+      "preview": "•••-••-6789"
+     },
+     {
+      "kind": "email",
+      "page": 0,
+      "preview": "••••.•••@••••••e.com"
+     },
+     {
+      "kind": "card",
+      "page": 1,
+      "preview": "•••• •••• •••• 1111"
+     }
+    ]
+   }
+  }
+ ],
+ "redact": [
+  {
+   "pdf": "tests/fixtures/sample.pdf",
+   "regions": [
+    {
+     "page": 0,
+     "x": 200,
+     "y": 600,
+     "width": 100,
+     "height": 20
+    }
+   ],
+   "reply": {
+    "audit": {
+     "auditSchema": "omitly.audit/v2",
+     "auditV2Overall": "review_required",
+     "blocking": false,
+     "decisionChannel": "cli",
+     "disclosures": [],
+     "license": "trial",
+     "licensedTo": null,
+     "metadataScrubbed": true,
+     "regions": [
+      {
+       "bbox": {
+        "height": 20,
+        "width": 100,
+        "x": 200,
+        "y": 600
+       },
+       "page": 0,
+       "reason_code": "UNSPECIFIED",
+       "timestamp": "2026-11-16T23:48:08.844319Z",
+       "verification": {
+        "result": "pass"
+       }
+      }
+     ],
+     "result": {
+      "blocking": false,
+      "canWrite": false,
+      "checked": [
+       {
+        "text": "No text found under any black or white box (2 pages)"
+       },
+       {
+        "text": "No hidden layers, embedded files or comments"
+       },
+       {
+        "text": "Single version: no earlier saves recoverable"
+       },
+       {
+        "text": "Page text readable on all 2 pages (no scanned pages)"
+       },
+       {
+        "text": "No scripts, automatic actions or page thumbnails"
+       },
+       {
+        "text": "Document properties and metadata read"
+       },
+       {
+        "text": "Nothing remains under the areas Omitly redacted, and the removed text was not found"
+       }
+      ],
+      "checkedAt": "2026-11-16T23:48:08.844319Z",
+      "decidedBy": [
+       {
+        "text": "Decided by: not recorded. The Omitly engine was run directly from the command line."
+       },
+       {
+        "text": "This is what the sealed report records. It does not prove who made the decision."
+       }
+      ],
+      "decisionChannel": "cli",
+      "decisions": [],
+      "detectionProfile": [
+       {
+        "text": "Detection profile: Omitly built-in detector (all regions), revision 1."
+       },
+       {
+        "text": "Profile content SHA-256: 7c8b435d7a44f801a102681a7e5b7e50ae90126119e319fbca00e230b7a9a4f5"
+       }
+      ],
+      "information": [],
+      "notChecked": [
+       {
+        "text": "Bookmarks, tooltips, labels and alternate text: none in this file"
+       },
+       {
+        "text": "Form fields: none in this file"
+       },
+       {
+        "text": "Searchable text on scanned pages: none in this file"
+       },
+       {
+        "text": "Text inside images is not read: this check does no OCR."
+       },
+       {
+        "text": "Pictures under a box (a box drawn over a scanned image) are not checked."
+       }
+      ],
+      "omitlyVersion": "0.1.0",
+      "pagesRead": 2,
+      "pagesTotal": 2,
+      "problems": [],
+      "producer": null,
+      "reasons": [],
+      "review": [
+       {
+        "pages": [
+         2
+        ],
+        "text": "Omitly's detector still finds possible identifiers in the redacted file on page 2 (1 value). A person needs to review the file before it is sent."
+       }
+      ],
+      "sealKey": [
+       {
+        "text": "Sealed with a one-time key: there is no known fingerprint to compare it with."
+       }
+      ],
+      "sha256": "fb7a585a71262b1117ebd5b6c53c671b598c69ed03a017c3f6c94fcd02199950",
+      "sizeBytes": 32072,
+      "state": "needs_review",
+      "summary": "No problems found, but 1 item needs a person to look at it before this file is sent. 2 pages checked."
+     },
+     "sealFingerprint": "5f:b6:a8:69:3a:bc:cd:31:2d:ac:5e:59:fe:29:d0:7f",
+     "userVerdict": "needs_review",
+     "verdict": "fail",
+     "warnings": [
+      "Marked as evaluation output. The redaction and verification are complete; activate or renew a licence for unmarked audit output."
+     ]
+    },
+    "auditLogPath": "<output>.audit.json",
+    "ok": true,
+    "output": "<output>"
+   }
+  }
+ ]
+}

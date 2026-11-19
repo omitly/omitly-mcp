@@ -53,8 +53,8 @@ Removed:
   - email "••••.•••@••••••e.com" (page 1)
 ```
 
-The underlying bytes are gone (not hidden), metadata is scrubbed, and a signed
-`offer.redacted.pdf.audit.json` sits next to the file as proof.
+The text is removed and the file is searched for it. Metadata is scrubbed, and a signed
+`offer.redacted.pdf.audit.json` sits next to the file as a record of what was checked.
 
 ## 2. The careful case — review before you cut
 
@@ -103,11 +103,11 @@ Claude reads the document, decides the strings, then:
 ```
 
 This is the division of labour that makes it trustworthy: **the model decides
-*what* is sensitive; the engine decides *where* it is and proves it's gone.**
+*what* is sensitive; the engine decides *where* it is, removes it, and checks the file for copies left behind.**
 
 ## 4. Always verify
 
-After any redaction Claude can independently re-confirm:
+After any redaction Claude can re-run the checks:
 
 ```jsonc
 // verify_redaction

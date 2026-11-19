@@ -28,7 +28,6 @@ const ENV_KEYS = [
   "OMITLY_PDF_BIN",
   "OMITLY_ENGINE_DIR",
   "OMITLY_STATE_DIR",
-  "OMITLY_FREE_CAP",
   "FAKE_CHECK_RESPONSE",
 ] as const;
 
@@ -45,17 +44,23 @@ function fakeEngine(root: string): string {
   writeFileSync(
     bin,
     `#!/usr/bin/env node
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 let raw = "";
 process.stdin.on("data", (d) => (raw += d));
 process.stdin.on("end", () => {
   const req = JSON.parse(raw);
-  const clean = { pages_total: 1, pages_scanned: 1, pages_failed: [], not_scanned: [] };
+  const clean = { pages_total: 1, pages_scanned: 1, pages_failed: [], not_scanned: [], prior_revisions_scanned: false, metadata_scanned: false, acroform_scanned: false, attachments_scanned: false, form_xobjects_scanned: 0, annotation_appearances_scanned: 0, raster_pages: [], raster_only_pages: [] };
   const out =
     req.command === "find"
       ? { ok: true, clean: true, count: 0, total_findings: 0, regions: [], survivors: [], off_page: [], coverage: clean }
       : req.command === "check"
         ? JSON.parse(process.env.FAKE_CHECK_RESPONSE)
         : { ok: false, error: "unhandled" };
+  // Contract C3: a genuine check reply is bound to the bytes of the file it was asked about.
+  if (req.command === "check" && out.check?.result && typeof out.check.result.sha256 === "string" && out.check.result.sha256.length === 64) {
+    out.check.result.sha256 = createHash("sha256").update(readFileSync(req.pdfPath)).digest("hex");
+  }
   process.stdout.write(JSON.stringify(out));
 });
 `,
@@ -141,13 +146,9 @@ for (const [name, make, verdict, blocking] of HOSTILE) {
       },
       doc,
     );
-    const v = res.structuredContent?.verdict;
-    assert.ok(v, `no verdict: ${JSON.stringify(res.content)}`);
-    assert.equal(v.verdict, "cannot_verify");
-    assert.equal(v.blocking, false);
-    assert.equal(v.result, null);
-    assert.equal("report" in v, false);
-    assert.equal(v.reason_code, "result_invalid");
+    // Contract §2.2 row 0 / §3.1: a result that fails the allowlist is no verdict at all: an execution failure, text only, no structured result.
+    assert.equal(res.isError, true, JSON.stringify(res.content));
+    assert.equal(res.structuredContent, undefined, "an execution failure carries no structured result");
     assert.ok(!JSON.stringify(res).includes(SECRET), "engine text reached the tool output");
   });
 }
@@ -190,11 +191,13 @@ test("check_redaction keeps the genuine wasm check result", async () => {
   const doc = path.join(root, "sample.pdf");
   writeFileSync(doc, readFileSync(fixture));
   const res = await callCheck(
-    { OMITLY_ALLOWED_DIR: root, OMITLY_STATE_DIR: path.join(root, "state"), OMITLY_FREE_CAP: "1000" },
+    { OMITLY_ALLOWED_DIR: root, OMITLY_STATE_DIR: path.join(root, "state") },
     doc,
   );
   const v = res.structuredContent.verdict;
-  assert.equal(v.verdict, "safe_to_send");
+  // omitly#1864: sample.pdf has visible identifiers, so the presented check's Safe to Send is held back.
+  assert.equal(v.verdict, "needs_review");
+  assert.equal(v.blocking, false);
   assert.equal(v.reason_code, null);
   assert.ok(v.result && v.result.checked.length > 0);
   // omitly#1496: the wasm's presented check records that nothing was decided.
@@ -222,6 +225,14 @@ for (const [name, result, verdict, blocking] of [
       },
       doc,
     );
+    if (result === null) {
+      // Contract C3: a check with no result carries no digest (only a refusal with a reason code may), so this answer is row 0:
+      // an execution failure, text only. The report's text still must not reach the output.
+      assert.equal(res.isError, true);
+      assert.equal(res.structuredContent, undefined);
+      assert.ok(!JSON.stringify(res).includes(SECRET), "report text reached the tool output");
+      return;
+    }
     const v = res.structuredContent?.verdict;
     assert.ok(v, `no verdict: ${JSON.stringify(res.content)}`);
     assert.equal("report" in v, false, "the verdict carries no report");

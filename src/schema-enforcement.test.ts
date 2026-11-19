@@ -64,6 +64,7 @@ test("checked() returns the parsed value for a payload that satisfies the schema
     offPage: [],
     coverage: COVERAGE,
     verdict: VERDICT,
+    outcome: "incomplete",
   });
   assert.equal(ok.clean, true);
   assert.equal(ok.totalFindings, 0);
@@ -82,6 +83,7 @@ test("checked() throws on an undeclared field, and names paths/codes but NOT the
         offPage: [],
         coverage: COVERAGE,
         verdict: VERDICT,
+        outcome: "needs_review",
         // The regression this whole mechanism exists for.
         rawText: RAW,
       } as z.input<typeof checkRedactionOutputSchema>),
@@ -117,6 +119,7 @@ test("an isError result carrying an undeclared field fails the tool call instead
         offPage: [],
         coverage: COVERAGE,
         verdict: VERDICT,
+        outcome: "needs_review",
         rawText: RAW,
       } as z.input<typeof checkRedactionOutputSchema>);
       return {

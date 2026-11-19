@@ -1,8 +1,8 @@
 {
   "name": "omitly-mcp",
-  "version": "5.5.0",
+  "version": "5.6.1",
   "type": "module",
-  "description": "Model Context Protocol server exposing Omitly's local, verifiable PDF redaction to AI agents. Redaction runs on-device — documents are never uploaded.",
+  "description": "Model Context Protocol server exposing Omitly's local, verifiable PDF redaction to AI agents. Redaction runs on-device — documents are never uploaded. Licence: omitly.app/eula.",
   "keywords": [
     "mcp",
     "model-context-protocol",
@@ -34,27 +34,30 @@
     "THIRD-PARTY-NOTICES.md"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && npm run build:view",
     "start": "node dist/index.js",
     "dev": "tsc --watch",
-    "test": "tsc && node --test --test-skip-pattern=\"(v2-produced file|v2 verdict that disagrees|DECISION_CHANNELS is the shared vectors|surfaces decisionChannel only when verified)\" \"dist/**/*.test.js\"",
+    "test": "tsc && npm run build:view && node --test --test-skip-pattern=\"(v2-produced file|v2 verdict that disagrees|DECISION_CHANNELS is the shared vectors|surfaces decisionChannel only when verified|probe_1890_enqueue_hashes_nothing|T18: only outcome|E1: a sidecar verify reply|E2: a sidecar that makes|E4: previews the file controls|E5: each closed engine|E6: a real-sized page list|every document tool, with a hostile|G1: check_redaction|G3: verify_redaction|G5: the real off-page|C3: a scan that does not|V1: ANY information|V2: region, survivor|E9a: every hostile|E9b: every string field|Z2: previews, kinds)\" \"dist/**/*.test.js\"",
     "fuzz": "node fuzz/edit-tools.fuzz.mjs",
     "prepublishOnly": "npm run build",
     "mcpb:prep": "node mcpb/scripts/copy-wasm.mjs && cp LICENSE mcpb/LICENSE && npm --prefix mcpb ci",
     "mcpb:validate": "npx -y @anthropic-ai/mcpb@2.1.2 validate mcpb/manifest.json",
-    "mcpb:pack": "npm run mcpb:prep && npm run mcpb:validate && mkdir -p dist-mcpb && npx -y @anthropic-ai/mcpb@2.1.2 pack mcpb dist-mcpb/omitly-leak-check.mcpb"
+    "mcpb:pack": "npm run mcpb:prep && npm run mcpb:validate && mkdir -p dist-mcpb && npx -y @anthropic-ai/mcpb@2.1.2 pack mcpb dist-mcpb/omitly-leak-check.mcpb",
+    "build:view": "tsc -p tsconfig.view.json && node scripts/build-view.mjs"
   },
   "dependencies": {
+    "@modelcontextprotocol/ext-apps": "1.7.5",
     "@modelcontextprotocol/sdk": "^1.32.1",
     "pdf-lib": "1.17.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "esbuild": "0.28.2",
     "generate-license-file": "4.2.1",
     "typescript": "^5.5.0"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   }
 }

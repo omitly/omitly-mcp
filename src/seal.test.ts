@@ -168,7 +168,7 @@ test("normalizeSealResult passes sealRemoved through beside a v2 cannot_verify",
 // omitly#1701 (owner decision 2026-10-27): a recorded "kept on purpose" decision
 // reads Needs Review, never Safe to Send. The engine decides; this only checks it.
 test("normalizeSealResult: pass_with_operator_decisions is Needs Review, and Safe to Send beside it is refused (omitly#1701)", () => {
-  const base = { ok: true, verdict: "unsupported_schema", auditV2Recognized: true, auditV2Overall: "pass_with_operator_decisions", blocking: false };
+  const base = { ok: true, verdict: "unsupported_schema", auditV2Recognized: true, auditV2Overall: "pass_with_operator_decisions", blocking: false, auditV2SealValid: true };
   const review = normalizeSealResult({ ...base, userVerdict: "needs_review" });
   assert.equal(review.userVerdict, "needs_review");
   assert.equal(review.auditV2Overall, "pass_with_operator_decisions");
@@ -187,10 +187,13 @@ test("normalizeSealResult never lets sealRemoved sit beside a pass, an unknown v
     auditV2Overall: "pass",
     userVerdict: "safe_to_send",
     blocking: false,
+    auditV2SealValid: true,
     sealRemoved: true,
   });
-  assert.equal(v2Pass.userVerdict, "safe_to_send");
-  assert.equal(v2Pass.sealRemoved, false);
+  // omitly#1864: a removed seal beside a v2 pass contradicts itself (a pass needs every gate, seal first,
+  // and `with_seal_removed` sets the flag only beside a failed seal): it is never Safe to Send.
+  assert.equal(v2Pass.userVerdict, "cannot_verify");
+  assert.equal(v2Pass.sealRemoved, true, "the failure is still worded as a removed seal");
   const unknown = normalizeSealResult({ ok: true, verdict: "bogus", sealRemoved: true });
   assert.equal(unknown.verdict, "seal_invalid");
   assert.equal(unknown.sealRemoved, false);
@@ -221,7 +224,7 @@ test("normalizeSealResult never invents or relays other text as the era label (o
 // omitly#1792: a one-time seal key is named beside the fingerprint, only on a
 // verified v2 result; it is a label and never moves a verdict.
 test("normalizeSealResult carries sealKeyKind only beside a verified v2 report (omitly#1792)", () => {
-  const verified = { ok: true, verdict: "unsupported_schema", auditV2Recognized: true, auditV2Overall: "pass", userVerdict: "safe_to_send", blocking: false };
+  const verified = { ok: true, verdict: "unsupported_schema", auditV2Recognized: true, auditV2Overall: "pass", userVerdict: "safe_to_send", blocking: false, auditV2SealValid: true };
   const one = normalizeSealResult({ ...verified, sealKeyKind: "one_time" });
   assert.equal(one.sealKeyKind, "one_time");
   assert.equal(one.userVerdict, "safe_to_send");

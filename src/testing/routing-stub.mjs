@@ -20,7 +20,8 @@
  * additionally assert exactly which commands reached the native engine and
  * how many times, independent of the response content.
  */
-import { appendFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 
 function log(command) {
   const logPath = process.env.OMITLY_ROUTING_STUB_LOG;
@@ -28,8 +29,12 @@ function log(command) {
   appendFileSync(logPath, JSON.stringify({ command, ts: Date.now() }) + "\n");
 }
 
+/** The ten checks the real `verify` always runs (crates/redaction-core/src/verify.rs:233-308), all passing. */
+const HIDDEN_CONTENT = ["thumbnails", "document-actions", "embedded-files", "incremental-revisions", "hidden-layers", "comment-annotations", "signature-identity", "semantic-text", "labels", "redacted-text-in-strings"].map((c) => ({ class: c, verification: { result: "pass" } }));
+
 function markerRegion() {
-  return { page: 0, x: 1, y: 2, width: 3, height: 4, kind: "native-stub-marker", preview: "•NATIVE•" };
+  // `under_redaction` is on the real native `find`'s page regions (crates/omitly-cli/src/main.rs `do_find`).
+  return { page: 0, x: 1, y: 2, width: 3, height: 4, kind: "native-stub-marker", preview: "•NATIVE•", under_redaction: false };
 }
 
 function markerAuditEntries() {
@@ -54,8 +59,13 @@ function handle(req) {
       return {
         ok: true,
         ...(sc === "true" || sc === "false" ? { scan_complete: sc === "true" } : {}),
+        clean: false,
         count: 1,
+        total_findings: 1,
         regions: [markerRegion()],
+        survivors: [],
+        off_page: [],
+        coverage: { pages_total: 1, pages_scanned: 1, pages_failed: [], not_scanned: [], prior_revisions_scanned: false, metadata_scanned: false, acroform_scanned: false, attachments_scanned: false, form_xobjects_scanned: 0, annotation_appearances_scanned: 0, raster_pages: [], raster_only_pages: [], ...(sc === "true" || sc === "false" ? { scan_complete: sc === "true" } : {}) },
       };
     }
     case "locate_text":
@@ -101,7 +111,9 @@ function handle(req) {
       // A fixed, always-clean verdict — sufficient to prove THIS command (the
       // sidecar-present native path) was the one reached, distinct from
       // "find" (native's no-sidecar fallback) and from a wasm rescan.
-      return { ok: true, verdict: "pass", regions: [], hiddenContent: [] };
+      // The real reply's whole shape (main.rs `do_verify`): `scan_performed: false`, `metadataScrubbed`,
+      // `hiddenContent`, `license`, `warnings`; "pass" needs the metadata scrubbed.
+      return { ok: true, scan_performed: false, verdict: "pass", regions: [], metadataScrubbed: true, hiddenContent: HIDDEN_CONTENT, disclosures: [], license: null, warnings: [] };
     case "create":
       writeFileSync(req.outputPath, "NATIVE-STUB-CREATED-PDF");
       return { ok: true, output: req.outputPath };
@@ -145,7 +157,7 @@ function handle(req) {
             reasons: [],
             checkedAt: new Date(0).toISOString(),
             omitlyVersion: "stub",
-            sha256: "0".repeat(64),
+            sha256: createHash("sha256").update(readFileSync(req.pdfPath)).digest("hex"), // contract C3: bound to the file
             canWrite: false,
             sizeBytes: 1,
             producer: null,

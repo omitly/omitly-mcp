@@ -29,26 +29,11 @@ const { McpServer } = require("@modelcontextprotocol/sdk/server/mcp.js");
 const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio.js");
 const { z } = require("zod");
 const { allowedRoot, readConfinedInput } = require("./paths.js");
-const { evaluationBanner, freeCapRefusal, recordFreeCheck } = require("./usage.js");
-
-/** Free-tier metering gate (omitly#226) for the two DETECTION tools only —
- *  this bundle is always the free wasm tier, so unlike the full server there
- *  is no native-engine bypass to consider. `verify_redaction` and
- *  `locate_text` are deliberately never metered. Returns the refusal result
- *  when capped, otherwise the metering outcome for the EVALUATION banner. */
-function freeTierGate(tool) {
-  const meter = recordFreeCheck();
-  if (meter.capped) {
-    return {
-      refusal: {
-        content: [{ type: "text", text: JSON.stringify(freeCapRefusal(tool, meter), null, 2) }],
-        isError: true,
-      },
-      meter,
-    };
-  }
-  return { meter };
-}
+const { CHECK_NOTICE, FIND_NOTICE } = require("./usage.js");
+const { createHash } = require("node:crypto");
+const { applyScanToVerdict, reconcileVerdict, safeText, textRegions, textOffPage, engineLine } = require("./verdict.js");
+const { parseScanReply, parseLocateReply, parseCheckVerdict, scanLegOf, checkLegOf, disclosureLabel, unusableReplyMessage, incompleteLine } = require("./replies.js");
+const { passOutcome, capped, isFailure, WHY, BENIGN_DISCLOSURES } = require("./outcome.js");
 
 const VERSION = JSON.parse(readFileSync(path.join(__dirname, "..", "manifest.json"), "utf8")).version;
 
@@ -78,6 +63,7 @@ function wasmScanToFindShape(raw) {
     regions: r.leaks,
     survivors: r.survivors,
     off_page: r.off_page,
+    scan_complete: r.scan_complete,
     coverage: r.coverage,
   };
 }
@@ -98,7 +84,10 @@ function runWasmCheck(bytes) {
   if (!wasmEngine || typeof wasmEngine.check !== "function") return unavailable;
   try {
     const v = JSON.parse(wasmEngine.check(new Uint8Array(bytes)));
-    return ["safe_to_send", "needs_review", "cannot_verify"].includes(v && v.verdict) ? v : unavailable;
+    // omitly#1864: the engine's FULL pass contract (replies.js `parseCheckVerdict`), not the verdict word
+    // alone: a bare `safe_to_send`, or a Safe to Send wrapped around a blocking result or one that lists
+    // problems, is a reply that contradicts itself, so it is no verdict.
+    return parseCheckVerdict(v).ok ? v : unavailable;
   } catch {
     return unavailable;
   }
@@ -106,27 +95,33 @@ function runWasmCheck(bytes) {
 
 /** The verdict as text: the heading, the check's own summary, and the
  *  sections as the engine wrote them (fixed lines, never document text). */
-function verdictText(v) {
-  const label =
-    v.verdict === "safe_to_send"
-      ? "Safe to Send"
-      : v.verdict === "needs_review"
-        ? v.blocking
-          ? "Needs Review — problems found"
-          : "Needs Review"
-        : "Cannot Verify";
+function verdictLabel(v) {
+  return v.verdict === "safe_to_send"
+    ? "Safe to Send"
+    : v.verdict === "needs_review"
+      ? v.blocking
+        ? "Needs Review — problems found"
+        : "Needs Review"
+      : "Cannot Verify";
+}
+
+function verdictText(engineVerdict, facts, reconciled) {
+  // omitly#1864: a verdict printed beside findings, or beside a scan that did not read the file, is
+  // never Safe to Send: `reconciled` is the engine's verdict after the scan facts AND the issued outcome (contract §7.1).
+  const v = reconciled || applyScanToVerdict(engineVerdict, facts);
+  const label = verdictLabel(v);
   const r = v.result || {};
   const lines = (title, items) =>
     Array.isArray(items) && items.length
       ? `  ${title}:\n` +
-        items.map((i) => `    - ${i.text}${i.pages ? ` (pages ${i.pages.join(", ")})` : ""}`).join("\n") +
+        items.map((i) => `    - ${engineLine(i.text)}${i.pages ? ` (pages ${i.pages.join(", ")})` : ""}`).join("\n") +
         "\n"
       : "";
   return (
     `Check verdict: ${label}.` +
-    (r.summary ? ` ${r.summary}` : "") +
+    (r.summary ? ` ${engineLine(r.summary)}` : "") +
     ` (A verdict about this check, limited to what it covered: hidden, covered and recoverable ` +
-    `content. It does not judge whether the visible text should be there, and it is not a ` +
+    `content, and the sensitive-looking text the pattern scan lists. It is not a ` +
     `statement that the document is safe.)\n` +
     lines("Checked", r.checked) +
     lines("Problems", r.problems) +
@@ -145,6 +140,86 @@ function runWasmLocate(bytes, needles) {
   return { ok: true, count: raw.count, regions: raw.leaks };
 }
 
+
+// ---------------------------------------------------------------------------------------------------
+// The check pipeline (docs/pass-contract.md §2, §3.1, §3.3): ONE function for check_redaction and the verify_redaction re-scan.
+// ---------------------------------------------------------------------------------------------------
+
+/** C1: the file is read ONCE into `bytes`; both wasm legs receive it, and its sha256 is the digest the check must carry (C3). */
+function runCheckPipeline(bytes) {
+  const snapshotSha256 = createHash("sha256").update(bytes).digest("hex");
+  const res = runWasmScan(bytes);
+  if (!res.ok) return { ok: false, text: `Audit failed: ${safeText(res.error || "unknown error")}` };
+  const parsed = parseScanReply(res, { engine: "wasm" });
+  if (!parsed.ok) return { ok: false, text: `Audit failed: ${unusableReplyMessage("scan", parsed.reason)}` };
+  const engineVerdict = runWasmCheck(bytes);
+  if (engineVerdict.reason_code === "check_unavailable") {
+    return {
+      ok: false,
+      text:
+        `⚠️ NOT A PASS — the verdict check could not run${parsed.value.total > 0 ? `; ${WHY.W1(parsed.value.total)}` : ""}.\n\n` +
+        `The verdict check did not run, so this is not a clean result. Do not treat this file as checked.`,
+    };
+  }
+  const leg = scanLegOf(parsed.value, "wasm");
+  const issued = passOutcome({ check: checkLegOf(engineVerdict), scan: leg, snapshotSha256 });
+  if (isFailure(issued)) return { ok: false, text: `Audit failed: ${unusableReplyMessage("check", issued.failure)}` };
+  const complete = leg.topComplete === true && leg.covComplete === true;
+  const facts = { found: parsed.value.total, complete, survivors: parsed.value.survivors.length };
+  const verdict = reconcileVerdict(applyScanToVerdict(engineVerdict, facts), issued);
+  return { ok: true, issued, engineVerdict, verdict, res, parsed, complete, facts };
+}
+
+/** Contract §6.4: an off-page finding's source is shown as its category, never the raw value. */
+const sourceCategory = (source) => {
+  // errata G5 (src/index.ts `sourceCategory`): the engine's real sources, by their prefix before ":".
+  const head = typeof source === "string" ? source.split(":")[0] : "";
+  const map = { "prior-revision": "revision", "form-field": "form", "form-xobject": "form-xobject", annotation: "annotation", metadata: "metadata", attachment: "attachment" };
+  return Object.prototype.hasOwnProperty.call(map, head) ? map[head] : "other";
+};
+
+/** The text of a completed check pipeline (check_redaction and the re-scan). */
+function renderCheck(p, pdfPath) {
+  const { res, issued, verdict, complete } = p;
+  const regions = res.regions || [];
+  const survivors = res.survivors || [];
+  const offPage = res.off_page || [];
+  const cov = res.coverage || {};
+  const total = res.total_findings;
+  const clean = total === 0;
+  const pass = issued.outcome === "safe_to_send";
+  const scanned = [
+    `${cov.pages_scanned !== undefined ? cov.pages_scanned : "?"}/${cov.pages_total !== undefined ? cov.pages_total : "?"} page text layer`,
+    cov.prior_revisions_scanned && "prior (superseded) revisions",
+    cov.metadata_scanned && "metadata",
+    cov.acroform_scanned && "form fields",
+    cov.attachments_scanned && "attachments",
+    (cov.form_xobjects_scanned || 0) > 0 && `${cov.form_xobjects_scanned} Form XObject(s)`,
+    (cov.annotation_appearances_scanned || 0) > 0 && `${cov.annotation_appearances_scanned} annotation appearance(s)`,
+  ].filter(Boolean);
+  // §6.4: the engine's not_scanned lines never reach the text; each shows as a fixed label.
+  const labels = [...new Set([...(cov.not_scanned || []).map(disclosureLabel), ...((cov.pages_failed || []).length ? [`${cov.pages_failed.length} page(s) that could not be parsed`] : [])])];
+  const panel =
+    `What this checks / does not check:\n` +
+    `  Scanned: ${scanned.join(", ") || "(coverage unavailable)"}\n` +
+    (labels.length ? `  Not scanned: ${labels.join(", ")}\n` : "") +
+    `  Pattern-based detection — names, addresses, and image-only text are not covered. A scan that lists nothing means "nothing this scan can see", not "nothing is left".\n`;
+  const headline = clean
+    ? pass
+      ? `✅ Safe to Send: the engine's check passed and the pattern scan read every page and found nothing.`
+      : `The pattern scan listed nothing in the part of this file that it read.`
+    : `⚠️ Found ${total} recoverable item(s) still in the file.`;
+  return (
+    issued.lead +
+    `${CHECK_NOTICE}\n\n` +
+    `${headline}\n\n${verdictText(p.engineVerdict, p.facts, verdict)}\n${panel}\n` +
+    (survivors.length ? `Survivors (under redaction marks): ${JSON.stringify(textRegions(survivors), null, 2)}\n\n` : "") +
+    (offPage.length ? `Off-page findings: ${JSON.stringify(offPage.map((f) => textOffPage(f, sourceCategory)), null, 2)}\n\n` : "") +
+    (regions.length ? `Regions:\n${JSON.stringify(textRegions(regions), null, 2)}\n\n` : "") +
+    `Diagnosis only — this free tool does not redact and does not issue a certificate. Omitly can remove what was found if the user asks.`
+  );
+}
+
 const server = new McpServer({ name: "omitly-leak-check", version: VERSION });
 
 server.tool(
@@ -157,9 +232,7 @@ server.tool(
     "completeness guarantee and not a compliance assessment. The file is never " +
     "uploaded — detection runs locally. Each candidate carries a MASKED preview " +
     "(e.g. '•••-••-6789'), never the raw value. Free tier: results are " +
-    "EVALUATION-marked and limited to 10 attempts a month, shared with " +
-    "check_redaction and counted locally — past the cap this tool returns a " +
-    "structured 'free-cap' refusal.",
+    "results carry a short notice that the scan removes nothing; there is no usage limit.",
   {
     pdfPath: z.string().describe("absolute path to the PDF to scan"),
   },
@@ -167,22 +240,35 @@ server.tool(
   async ({ pdfPath }) => {
     try {
       const bytes = readConfinedInput(pdfPath, ROOT);
-      const { refusal, meter } = freeTierGate("find_sensitive_regions");
-      if (refusal) return refusal;
       const res = runWasmScan(bytes);
       if (!res.ok) {
-        return { content: [{ type: "text", text: `Scan failed: ${res.error || "unknown error"}` }], isError: true };
+        return { content: [{ type: "text", text: `Scan failed: ${safeText(res.error || "unknown error")}` }], isError: true };
       }
-      const found = res.regions || [];
+      const parsed = parseScanReply(res, { engine: "wasm" });
+      if (!parsed.ok) {
+        return { content: [{ type: "text", text: `Scan failed: ${unusableReplyMessage("scan", parsed.reason)}` }], isError: true };
+      }
+      const found = parsed.value.regions;
+      const leg = scanLegOf(parsed.value, "wasm");
+      const complete = leg.topComplete === true && leg.covComplete === true;
+      // Contract §3.2: capped scan facts, and ALWAYS at most `incomplete` (W12): a pattern scan is not a check of the document.
+      const caps = [];
+      if (leg.survivors > 0) caps.push({ at: "not_a_pass", why: WHY.W2(leg.survivors) });
+      if (leg.total > 0) caps.push({ at: "needs_review", why: WHY.W1(leg.total) });
+      if (!complete) caps.push({ at: "incomplete", why: WHY.W3 });
+      if (leg.notScanned.some((l) => !BENIGN_DISCLOSURES.includes(l)) || leg.pagesFailed > 0 || leg.embeddedStreamsFailed > 0 || leg.flagsSet) caps.push({ at: "incomplete", why: WHY.W5 });
+      caps.push({ at: "incomplete", why: WHY.W12 });
+      const issued = capped(null, caps);
       const summary =
-        `${evaluationBanner(meter)}\n\n` +
+        issued.lead +
+        incompleteLine(parsed.value.scanComplete) +
+        `${FIND_NOTICE}\n\n` +
         `Found ${found.length} candidate region(s). Diagnosis only — this free ` +
-        `tool does not redact. Removing the data for real, with a verified audit ` +
-        `trail, is the licensed Omitly desktop app (https://omitly.app/?via=mcp).\n\n` +
-        JSON.stringify(found, null, 2);
-      return { content: [{ type: "text", text: summary }] };
+        `tool does not redact. Omitly can remove what was found if the user asks.\n\n` +
+        JSON.stringify(textRegions(found), null, 2);
+      return { content: [{ type: "text", text: summary }], structuredContent: { outcome: issued.outcome }, isError: false };
     } catch (e) {
-      return { content: [{ type: "text", text: `Could not scan: ${e.message}` }], isError: true };
+      return { content: [{ type: "text", text: `Could not scan: ${safeText(e.message)}` }], isError: true };
     }
   },
 );
@@ -205,13 +291,17 @@ server.tool(
     try {
       const res = runWasmLocate(readConfinedInput(pdfPath, ROOT), texts);
       if (!res.ok) {
-        return { content: [{ type: "text", text: `Search failed: ${res.error || "unknown error"}` }], isError: true };
+        return { content: [{ type: "text", text: `Search failed: ${safeText(res.error || "unknown error")}` }], isError: true };
       }
-      const regions = res.regions || [];
-      const summary = `Located ${regions.length} occurrence(s). Diagnosis only — this free tool does not redact.\n\n${JSON.stringify(regions, null, 2)}`;
+      const parsedLocate = parseLocateReply(res);
+      if (!parsedLocate.ok) {
+        return { content: [{ type: "text", text: `Search failed: ${unusableReplyMessage("search", parsedLocate.reason)}` }], isError: true };
+      }
+      const regions = parsedLocate.value.regions;
+      const summary = `Located ${regions.length} occurrence(s). Diagnosis only — this free tool does not redact.\n\n${JSON.stringify(textRegions(regions), null, 2)}`;
       return { content: [{ type: "text", text: summary }] };
     } catch (e) {
-      return { content: [{ type: "text", text: `Could not search: ${e.message}` }], isError: true };
+      return { content: [{ type: "text", text: `Could not search: ${safeText(e.message)}` }], isError: true };
     }
   },
 );
@@ -229,18 +319,12 @@ server.tool(
   { title: "Verify redaction", readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   async ({ pdfPath }) => {
     try {
-      const res = runWasmScan(readConfinedInput(pdfPath, ROOT));
-      if (!res.ok) {
-        return { content: [{ type: "text", text: `Could not verify: ${res.error || "unknown error"}` }], isError: true };
-      }
-      const total = res.total_findings !== undefined ? res.total_findings : (res.regions || []).length;
-      const clean = res.clean !== undefined ? res.clean : total === 0;
-      const summary = clean
-        ? `✅ No recoverable PII found on the surfaces scanned (general re-scan — no redaction sidecar to check specific regions against).`
-        : `⚠️ Found ${total} recoverable item(s) — this file is not clean.\n\n${JSON.stringify(res, null, 2)}`;
-      return { content: [{ type: "text", text: summary }], isError: !clean };
+      // Contract §3.3: the re-scan runs the same check pipeline as check_redaction, because a clean scan does not make a file safe to send.
+      const p = runCheckPipeline(readConfinedInput(pdfPath, ROOT));
+      if (!p.ok) return { content: [{ type: "text", text: p.text }], isError: true };
+      return { content: [{ type: "text", text: renderCheck(p) }], structuredContent: { outcome: p.issued.outcome }, isError: false };
     } catch (e) {
-      return { content: [{ type: "text", text: `Could not verify: ${e.message}` }], isError: true };
+      return { content: [{ type: "text", text: `Could not verify: ${safeText(e.message)}` }], isError: true };
     }
   },
 );
@@ -262,75 +346,25 @@ server.tool(
     "Diagnosis only — this tool never redacts anything and never issues a " +
     "certificate. Nothing is uploaded. (Pattern-based: names/addresses, " +
     "image-only text, and the surfaces listed as not-inspected aren't covered; " +
-    "absence of hits isn't proof of completeness.) Free tier: reports are " +
-    "EVALUATION-marked — for evaluation, not production reliance — and limited " +
-    "to 10 attempts a month, shared with find_sensitive_regions and counted " +
-    "locally; past the cap this tool returns a structured 'free-cap' refusal. It also gives a check verdict — " +
-    "Safe to Send, Needs Review or Cannot Verify — from the same presented-document check " +
-    "the Omitly desktop app runs; the verdict is about THE CHECK and what it covered " +
-    "(hidden, covered and recoverable content, not whether visible text should be there), " +
-    "never a statement that the document is safe.",
+    "absence of hits isn't proof of completeness.) Free tier: reports carry " +
+    "a short notice that the check removes nothing and is not a removal certificate; " +
+    "there is no usage limit. `outcome` is the only verdict field. `safe_to_send` is given only when the engine's check passed, " +
+    "the scan read the whole file and found nothing, and the file's own seal or report played no part. `needs_review`, `not_a_pass` and " +
+    "`incomplete` are not passes. A finished check is a result, not a tool failure: isError is false even when it found a leak, so " +
+    "isError false does not mean the file is safe: read the first line and `outcome` in the structured result. isError true means the check could not run.",
   {
     pdfPath: z.string().describe("absolute path to the supposedly-redacted PDF to audit"),
   },
   { title: "Check redaction for leaks", readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   async ({ pdfPath }) => {
     try {
-      const bytes = readConfinedInput(pdfPath, ROOT);
-      const { refusal, meter } = freeTierGate("check_redaction");
-      if (refusal) return refusal;
-      const res = runWasmScan(bytes);
-      if (!res.ok) {
-        return { content: [{ type: "text", text: `Audit failed: ${res.error || "unknown error"}` }], isError: true };
-      }
-      const regions = res.regions || [];
-      const survivors = res.survivors || [];
-      const offPage = res.off_page || [];
-      const cov = res.coverage || {};
-      const total = res.total_findings !== undefined ? res.total_findings : regions.length;
-      const clean = res.clean !== undefined ? res.clean : total === 0;
-
-      const scanned = [
-        `${cov.pages_scanned !== undefined ? cov.pages_scanned : "?"}/${cov.pages_total !== undefined ? cov.pages_total : "?"} page text layer`,
-        cov.prior_revisions_scanned && "prior (superseded) revisions",
-        cov.metadata_scanned && "metadata",
-        cov.acroform_scanned && "form fields",
-        cov.attachments_scanned && "attachments",
-        (cov.form_xobjects_scanned || 0) > 0 && `${cov.form_xobjects_scanned} Form XObject(s)`,
-        (cov.annotation_appearances_scanned || 0) > 0 &&
-          `${cov.annotation_appearances_scanned} annotation appearance(s)`,
-      ].filter(Boolean);
-      const notScanned = [
-        ...(cov.not_scanned || []),
-        ...(((cov.pages_failed || []).length ? [`${cov.pages_failed.length} page(s) that could not be parsed`] : [])),
-      ];
-
-      const panel =
-        `What this checks / does not check:\n` +
-        `  Scanned: ${scanned.join(", ") || "(coverage unavailable)"}\n` +
-        (notScanned.length ? `  Not scanned: ${notScanned.join(", ")}\n` : "") +
-        `  Pattern-based detection — names, addresses, and image-only text are ` +
-        `not covered. A clean result means "nothing this scan can see", not ` +
-        `"nothing is left".\n`;
-
-      const verdict = clean
-        ? `✅ No recoverable PII found in this audit's scope.`
-        : `⚠️ Found ${total} recoverable item(s) still in the file.`;
-
-      const summary =
-        `${evaluationBanner(meter)}\n\n` +
-        `${verdict}\n\n${verdictText(runWasmCheck(bytes))}\n${panel}\n` +
-        (survivors.length ? `Survivors (under redaction marks): ${JSON.stringify(survivors, null, 2)}\n\n` : "") +
-        (offPage.length ? `Off-page findings (metadata/attachments/etc.): ${JSON.stringify(offPage, null, 2)}\n\n` : "") +
-        (regions.length ? `Regions:\n${JSON.stringify(regions, null, 2)}\n\n` : "") +
-        `Diagnosis only — this free tool does not redact and does not issue a ` +
-        `certificate. To remove the data for real, with an offline-verifiable, ` +
-        `tamper-evident audit trail, use the licensed Omitly desktop app ` +
-        `(https://omitly.app/?via=mcp).`;
-
-      return { content: [{ type: "text", text: summary }], isError: !clean };
+      const p = runCheckPipeline(readConfinedInput(pdfPath, ROOT));
+      if (!p.ok) return { content: [{ type: "text", text: p.text }], isError: true };
+      // omitly#1857/#1864 + contract §3: a COMPLETED check is not an error, whatever it found: the text opens with NOT A PASS and
+      // `structuredContent.outcome` carries the verdict. A row-0 case (the check did not run, a contradiction, a digest mismatch) is `isError: true`, text only.
+      return { content: [{ type: "text", text: renderCheck(p, pdfPath) }], structuredContent: { outcome: p.issued.outcome }, isError: false };
     } catch (e) {
-      return { content: [{ type: "text", text: `Could not audit: ${e.message}` }], isError: true };
+      return { content: [{ type: "text", text: `Could not audit: ${safeText(e.message)}` }], isError: true };
     }
   },
 );

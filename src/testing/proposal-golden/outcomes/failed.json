@@ -1,0 +1,13 @@
+{
+  "createdAt": "2026-11-01T00:00:00Z",
+  "decidedAt": "2026-11-02T00:00:00Z",
+  "decidedRevision": "19845c9d37e20f2bd6e9c87f0248ca24133fae537091bccdba11a27a95ad0d5c",
+  "decision": "unknown",
+  "id": "cccccccccccccccccccccccc",
+  "mailboxRevision": "<sha256 of the status file>",
+  "note": null,
+  "output": null,
+  "tool": "redact_pdf",
+  "v": 1,
+  "verdict": null
+}

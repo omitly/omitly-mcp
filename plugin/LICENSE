@@ -1,34 +1,38 @@
-Omitly MCP server — Proprietary License
-Copyright (c) 2026 Innisfallen Pty Ltd. All rights reserved.
+Omitly MCP server, Omitly plugin for Claude, and Omitly Redaction Leak Check
+Copyright (c) 2026 Innisfallen Pty Ltd (ABN 12 699 798 288). All rights reserved.
 
-This software is provided to let AI agents and MCP clients use Omitly's
-local, on-device PDF tools: free functionality (detection, leak checking,
-verification, document generation) at no charge, and paid functionality
-(verifiable redaction and any other features gated by an Omitly licence)
-subject to a valid, current Omitly licence.
+This software is proprietary. It is licensed, not sold, under the Omitly End
+User Licence Agreement (the "Agreement"):
 
-Permission is granted to install and use this package to:
-  (a) use the free functionality for any lawful purpose; and
-  (b) use the paid functionality only while you hold a valid Omitly licence
-      issued by Innisfallen and in accordance with the Omitly Terms of
-      Service at https://omitly.app.
+    https://omitly.app/eula
 
-You may NOT, except to the extent permitted by applicable law that cannot be
-excluded by agreement:
-  - copy, modify, or create derivative works of this software;
-  - reverse engineer, decompile, or disassemble it, or attempt to derive the
-    source of the closed components or engine;
-  - redistribute, sublicense, sell, rent, or lease it;
-  - circumvent, disable, or interfere with the licence gating or any
-    usage metering; or
-  - remove or alter any proprietary notices.
+By installing or using this software you agree to the Agreement. The summary
+below is a convenience and does not replace it. If you cannot reach that
+page, write to hello@omitly.app and we will send you a copy.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+  - Free tools. Finding likely sensitive content in a PDF, checking and
+    verifying a redacted PDF, extracting text, and the page tools are free to
+    use for any lawful purpose, including commercial use. They need no
+    licence.
 
-For commercial licensing terms, contact hello@omitly.app.
+  - Paid features. Removing content from a PDF needs the Omitly free trial or
+    an Omitly licence. Some packages contain only the free tools.
+
+  - Source code. Where the source of this software is published, you may read
+    it, build and run it, and modify it for your organisation's own use under
+    the Agreement. It is not open source. You may not sell, rent, lease or
+    redistribute this software, modified or not, to anyone outside your
+    organisation, or reuse its code in other software, except where a law
+    that cannot be excluded allows it. We do not support modified copies.
+
+  - One person's work. A licence covers one person's own work. Running this
+    software as a service for other people needs a separate agreement.
+
+Nothing in this file or in the Agreement excludes, restricts or modifies any
+right or remedy you have under the Australian Consumer Law, or under any
+other law, that cannot lawfully be excluded.
+
+Third-party components are licensed on their own terms. See the third-party
+notices shipped with this software.
+
+Questions: hello@omitly.app

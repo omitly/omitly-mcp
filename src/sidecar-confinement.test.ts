@@ -36,7 +36,6 @@ const ENV_KEYS = [
   "OMITLY_PDF_BIN",
   "OMITLY_ENGINE_DIR",
   "OMITLY_STATE_DIR",
-  "OMITLY_FREE_CAP",
   "FAKE_ENGINE_LOG",
   "FAKE_SWAP_SIDECAR_TO",
   "FAKE_FAIL_MODE",
@@ -51,6 +50,7 @@ async function importFresh(env: Partial<Record<(typeof ENV_KEYS)[number], string
 }
 
 const ENGINE_SOURCE = `#!/usr/bin/env node
+import { createHash } from "node:crypto";
 import { appendFileSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 let raw = "";
 process.stdin.on("data", (d) => (raw += d));
@@ -59,8 +59,12 @@ process.stdin.on("end", () => {
   appendFileSync(process.env.FAKE_ENGINE_LOG, req.command + "\\n");
   let out;
   if (req.command === "find") {
-    out = { ok: true, clean: true, count: 0, total_findings: 0, regions: [],
-            coverage: { pages_total: 1, pages_scanned: 1, pages_failed: [], not_scanned: [] } };
+    out = { ok: true, scan_complete: true, clean: true, count: 0, total_findings: 0, regions: [], survivors: [], off_page: [],
+            coverage: { pages_total: 1, pages_scanned: 1, pages_failed: [], not_scanned: [], prior_revisions_scanned: false, metadata_scanned: false, acroform_scanned: false, attachments_scanned: false, form_xobjects_scanned: 0, annotation_appearances_scanned: 0, raster_pages: [], raster_only_pages: [], scan_complete: true } };
+  } else if (req.command === "check") {
+    // Contract C3: the check is bound to the bytes of the file it is asked about.
+    const sha = createHash("sha256").update(readFileSync(req.pdfPath)).digest("hex");
+    out = { ok: true, check: { verdict: "safe_to_send", blocking: false, reason_code: null, result: { state: "safe_to_send", blocking: false, summary: "ok", pagesTotal: 1, pagesRead: 1, checked: [{ text: "Metadata" }], notChecked: [], problems: [], review: [], information: [], decisions: [], reasons: [], checkedAt: "2026-11-13T01:00:00Z", omitlyVersion: "5.6.0", sha256: sha, sizeBytes: 40, canWrite: false, producer: null, decisionChannel: "none" } } };
   } else if (req.command === "verify") {
     const sidecar = req.pdfPath + ".audit.json";
     if (process.env.FAKE_SWAP_SIDECAR_TO) {
@@ -78,7 +82,7 @@ process.stdin.on("end", () => {
     }
     out = { ok: true, verdict: "fail",
             regions: entries.map((e) => ({ page: e.page, reason: e.reason_code, verification: { result: "fail", detail: "x" } })),
-            metadataScrubbed: true, hiddenContent: [], disclosures: [] };
+            metadataScrubbed: true, warnings: [], hiddenContent: ["thumbnails", "document-actions", "embedded-files", "incremental-revisions", "hidden-layers", "comment-annotations", "signature-identity", "semantic-text", "labels", "redacted-text-in-strings"].map((c) => ({ class: c, verification: { result: "pass" } })), disclosures: [] };
   } else {
     out = { ok: false, error: "unhandled " + req.command };
   }
@@ -173,8 +177,13 @@ test("verify_redaction: a normal in-root sidecar is still verified (mode sidecar
   writeFileSync(`${p.pdf}.audit.json`, JSON.stringify(entry("PII.EMAIL")));
   const res = await call(envFor(p), "verify_redaction", { pdfPath: p.pdf });
   assert.equal(res.structuredContent.mode, "sidecar");
-  assert.deepEqual(commandsRun(p.log), ["verify"]);
-  assert.ok(res.content[0].text.includes("PII.EMAIL"));
+  // Contract §3.4: the sidecar `verify`, then this server's own check pipeline (find, check). The sidecar's strings (the
+  // reason code is the file's own) are structured only, never in the text (§6.4).
+  assert.deepEqual(commandsRun(p.log), ["verify", "find", "check"]);
+  assert.equal(res.isError, false);
+  assert.equal(res.structuredContent.outcome, "not_a_pass", "the stub's regions fail: W9");
+  assert.ok(res.structuredContent.findings.some((f: any) => f.reason === "PII.EMAIL"));
+  assert.ok(!res.content[0].text.includes("PII.EMAIL"));
 });
 
 test("verify_redaction: a PDF that is itself an in-root symlink still verifies against ITS real name's sidecar", async () => {
@@ -184,7 +193,7 @@ test("verify_redaction: a PDF that is itself an in-root symlink still verifies a
   symlinkSync(p.pdf, alias);
   const res = await call(envFor(p), "verify_redaction", { pdfPath: alias });
   assert.equal(res.structuredContent.mode, "sidecar");
-  assert.ok(res.content[0].text.includes("PII.EMAIL"));
+  assert.ok(res.structuredContent.findings.some((f: any) => f.reason === "PII.EMAIL"));
 });
 
 test("verify_redaction: no sidecar behaves as before (general re-scan)", async () => {
@@ -192,7 +201,7 @@ test("verify_redaction: no sidecar behaves as before (general re-scan)", async (
   const res = await call(envFor(p), "verify_redaction", { pdfPath: p.pdf });
   assert.equal(res.structuredContent.mode, "rescan");
   assert.equal(res.structuredContent.clean, true);
-  assert.deepEqual(commandsRun(p.log), ["find"]);
+  assert.deepEqual(commandsRun(p.log), ["find", "check"], "the re-scan runs this server's own check pipeline (contract §3.3)");
 });
 
 test("verify_redaction: a sidecar swapped for an outside link WHILE the engine runs is discarded unread", async () => {

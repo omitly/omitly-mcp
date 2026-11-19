@@ -4,6 +4,8 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server that exposes
 Omitly's **local, verifiable PDF redaction** to AI agents (Claude Code, Claude
 Desktop, and any other MCP client).
 
+Licence: the Omitly End User Licence Agreement, https://omitly.app/eula. Installing or using this package accepts it.
+
 > **Repository scope and licence — please read before opening a PR.**
 >
 > This repository is **source-available, not open source**. See [`LICENSE`](LICENSE):
@@ -45,6 +47,10 @@ Add the server to your MCP client with `npx` — nothing to clone, build or
 compile. Published releases ship the wasm detector bundled, so a registry
 install never needs Rust.
 
+Requires Node.js 22 or later. If you do not have it, install the current LTS
+release from <https://nodejs.org/en/download>. Node.js 20 and older are
+end-of-life and no longer get security fixes.
+
 Claude Code:
 
 ```bash
@@ -72,11 +78,13 @@ control"). Claude Desktop users can instead install the one-click `.mcpb`
 bundle (see "One-click install for Claude Desktop" below).
 
 Five tools work out of the box. `find_sensitive_regions` and `check_redaction`
-are free but EVALUATION-marked and limited to 10 attempts a month, shared
-across the two, without a native engine (`OMITLY_FREE_CAP` changes the number);
-`locate_text`, `verify_redaction` and `extract_pdf_text` are free with no cap. Redaction (`redact_pdf`, `redact_by_entity`),
+are free with no usage limit; without a native engine their results carry a one-sentence
+notice that the check removes nothing. `locate_text`, `verify_redaction` and `extract_pdf_text` are free with no cap
+and no marking. Redaction (`redact_pdf`, `redact_by_entity`) is done by the Omitly
+desktop app: with the app running and "Accept proposals in Omitly" on, a request is queued for the
+person to accept in the app; otherwise the tool says nothing was removed and what to do next.
 `create_pdf` and seal verification need the native engine, which is not
-currently distributed outside the source repo (omitly#1405).
+currently distributed outside the source repo (omitly#1405); the app checks seals under Home → "Verify a redacted PDF".
 
 ## Skill (Claude Code)
 
@@ -94,8 +102,8 @@ curl -fsSL https://raw.githubusercontent.com/omitly/omitly-mcp/main/skill/SKILL.
 ```
 
 A project can instead keep the skill under `.claude/skills/omitly-redaction/`.
-The skill is instructions only; limits and the free cap are enforced by the
-server, not by the skill.
+The skill is instructions only; what each tool does is decided by the server,
+not by the skill.
 
 **Any other MCP client** (Claude Desktop, Cursor, …) needs no install: the
 server offers the same instructions as the `omitly-redaction` prompt, with an
@@ -106,18 +114,18 @@ prompt is read from the shipped `skill/SKILL.md`, so the two never differ.
 
 | Tool | What it does |
 |------|--------------|
-| `find_sensitive_regions` | Scans a PDF on-device and returns PII candidates — email/SSN/phone/card plus Australian identifiers (TFN, ABN, ACN, Medicare, Centrelink CRN, IHI, BSB; check-digit validated where a published algorithm exists) — with page + exact coordinates, so the agent selects by entity and never guesses geometry. Best-effort pattern matching, not a compliance assessment. Optional `regions` (`generic`/`us`/`au`) narrows the listed kinds. Free tier (wasm) is EVALUATION-marked and counts toward the shared 10-attempts-a-month cap (see "Licensing"); a configured native engine is not capped. |
-| `locate_text` | Resolves literal strings the model supplies (names, addresses — anything regex can't catch) to their page + coordinates. The model does the recognition; the engine does the geometry. |
-| `check_redaction` | Audits an ALREADY-redacted PDF and reports whether sensitive text still survives underneath the redaction marks, in prior incremental-update revisions, metadata, AcroForm fields, or attachments — the "did my black boxes actually remove the data?" check, with a coverage report scoping what was inspected. It also returns `verdict` — `safe_to_send`, `needs_review` (with `blocking` for a problem found) or `cannot_verify` — from the same presented-document check the desktop app's "Check any PDF" runs (native `omitly-redact check` or the bundled wasm `check`, one Rust function), with the fixed-copy result sections (what was checked, problems, review, what could not be checked). The full audit v2 report behind the verdict is not returned by this tool; it is available from the engine's `check` command. A verdict is about the check and what it covered (hidden, covered and recoverable content), never a statement that the document is safe. Free tier (wasm) is EVALUATION-marked and counts toward the shared 10-attempts-a-month cap (see "Licensing"); a configured native engine is not capped. |
+| `find_sensitive_regions` | Scans a PDF on-device and returns PII candidates — email/SSN/phone/card plus Australian identifiers (TFN, ABN, ACN, Medicare, Centrelink CRN, IHI, BSB; check-digit validated where a published algorithm exists) — with page + exact coordinates, so the agent selects by entity and never guesses geometry. Best-effort pattern matching, not a compliance assessment. Optional `regions` (`generic`/`us`/`au`) narrows the listed kinds. Also returns an opaque `analysisId` naming this scan (see "Accept-in-app"). Free tier (wasm) results carry a one-sentence notice that nothing is removed, and have no usage limit (see "Licensing"). |
+| `locate_text` | Resolves literal strings the model supplies (names, addresses — anything regex can't catch) to their page + coordinates. The model does the recognition; the engine does the geometry. Also returns an `analysisId`, as `find_sensitive_regions` does. |
+| `check_redaction` | Audits an ALREADY-redacted PDF and reports whether sensitive text still survives underneath the redaction marks, in prior incremental-update revisions, metadata, AcroForm fields, or attachments — the "did my black boxes actually remove the data?" check, with a coverage report scoping what was inspected. It also returns `verdict` — `safe_to_send`, `needs_review` (with `blocking` for a problem found) or `cannot_verify` — from the same presented-document check the desktop app's "Check any PDF" runs (native `omitly-redact check` or the bundled wasm `check`, one Rust function), with the fixed-copy result sections (what was checked, problems, review, what could not be checked). The full audit v2 report behind the verdict is not returned by this tool; it is available from the engine's `check` command. A verdict is about the check and what it covered (hidden, covered and recoverable content), never a statement that the document is safe. Free tier (wasm) results carry a one-sentence notice that nothing is removed, and have no usage limit (see "Licensing"). |
 | `extract_pdf_text` | Extracts a PDF's full text, page by page, PII-MASKED BY DEFAULT so raw sensitive values never flood the model's context window. Each page's `spans` report the CHAR offset (not byte offset) and kind of every masked value, so an agent can still reason about position without seeing the raw value. `masked: false` is a documented, explicit opt-in to raw text. Free, no licence, works out of the box on the bundled wasm engine — a native engine is preferred when available (also enables the `regions` filter; wasm ignores it and scans every pattern). Never renders pages to images. |
 | `redact_by_entity` | One-shot: find + filter by kind (`email`/`ssn`/`phone`/`card`/`tfn`/`abn`/`acn`/`medicare`/`crn`/`ihi`/`bsb`) and/or `regions` + redact + verify. The "just scrub the obvious PII" shortcut. |
-| `redact_pdf` | Removes the underlying data from given regions of a PDF, verifies nothing survives, writes the redacted file, and returns the audit log. |
+| `redact_pdf` | Removes the underlying data from given regions of a PDF, checks the file for copies of the removed text that editing software leaves behind, writes the redacted file, and returns the audit log. With the desktop app running and accept-in-app on it queues instead, and then needs the `analysisId` of the scan the regions came from. A region's `reason` is your own audit label (for example `PII: SSN`); `AI_PROPOSAL`, `MANUAL` and `OCR_CORRECTED` (before any `\|` or `=>`, in any case) are reserved for what a person decided in the Omitly desktop app, and a request that uses one is refused whole, with nothing written (omitly#1890). |
 | `verify_redaction` | Re-scans an already-redacted PDF and returns the verification verdict — the redaction-completeness check. |
 | `verify_seal` | Cryptographically checks a PDF's embedded Omitly audit report and whole-file tamper-evidence seal (seal v1: Ed25519; seal v2, from Omitly 4.0: ML-DSA-87 with ECDSA P-384) — the tamper-evidence check, distinct from `verify_redaction`. **Integrity, not identity:** the signing key rides inside the file (per-install from the desktop app, or one-time for a single output from the engine), so a valid seal means "unchanged since sealed by the holder of this key", never "produced by Omitly" — compare `sealFingerprint` out-of-band for origin. Requires a native engine; no wasm fallback exists. |
 | `verify_document` | Recipient trust-verification (omitly#113): the same seal/report check as `verify_seal` — not a survivor re-scan — aimed at someone who *received* a PDF from someone else and wants to confirm the file is unchanged since it was sealed (integrity, not identity — see `verify_seal`), without paying or licensing anything. Free, no licence. Currently requires a native engine like `verify_seal` (no wasm seal-verification path yet). |
 | `create_pdf` | Generates a clean PDF from Markdown/HTML on-device, rendered through a real browser engine so it looks printed — instead of writing a throwaway reportlab/LaTeX script. |
 | `check_license` | Reports the current licence or trial state — tier, trial days left, the vendor-signed licensee name, which resolution step supplied the licence, and whether it is bound to this machine. Free, takes no arguments, reads no document, and is re-resolved on every call so buy → save licence → call again works without a restart. **Never returns the device fingerprint or the licence file's contents** — device binding is a yes/no. Requires a native engine: the wasm free tier has no licence concept. |
-| `propose_redactions` | omitly#1643, bring your own AI: proposes regions for a PERSON to accept in the Omitly desktop app. Writes nothing. Requires the desktop app to be running on this computer; on acceptance the desktop removes, verifies and seals, and the record shows a person decided (`human-desktop`). |
+| `propose_redactions` | omitly#1643, bring your own AI: proposes regions for a PERSON to accept in the Omitly desktop app. Writes nothing. Requires the desktop app to be running on this computer; on acceptance the desktop removes the data, checks the file for copies left behind and seals, and the record shows a person decided (`human-desktop`). The regions must come from a scan of the document: pass the `analysisId` that `find_sensitive_regions` or `locate_text` returned. |
 | `get_proposal_status` | Follows a queued proposal: pending, accepted, rejected, applied (with output path and verdict), failed or expired. Free; reads no document. |
 | `pdf_info` | omitly#1841, free page tool: page count, each page's size and rotation (first 500), and flags for encryption, forms, signatures, comments, XFA and layers. Counts and flags only, never text. Works on encrypted files. Page numbers start at 1. |
 | `merge_pdfs` | omitly#1841, free page tool: joins 2 to 50 PDFs, in order, into one NEW PDF. Keeps every page and the forms; bookmarks, metadata, page labels and layers are not carried over (listed in `lost`). Digital signatures are removed. |
@@ -128,8 +136,7 @@ prompt is read from the shipped `skill/SKILL.md`, so the two never differ.
 ### Page tools (omitly#1841)
 
 `pdf_info`, `merge_pdfs`, `extract_pages`, `split_pdf` and `edit_pages` are free and uncapped. They run inside this
-package with no desktop app and no licence, never go through the accept-in-app queue, and are not counted toward the
-10-a-month check cap. Each writes a NEW `.pdf` inside the allowed folder (never overwriting, never into a hidden
+package with no desktop app and no licence, never go through the accept-in-app queue. Each writes a NEW `.pdf` inside the allowed folder (never overwriting, never into a hidden
 folder or `.git`) and reports what it could not carry over in `lost` and `warnings`. Page numbers start at 1; the
 check tools return 0-based `page` values, so add 1.
 
@@ -144,19 +151,30 @@ directory is your home folder or the filesystem root, these tools refuse and ask
 
 While the Omitly desktop app is running on the same computer with **Settings → Connect
 your AI → "Accept proposals in Omitly"** on (the default), `redact_pdf` and
-`redact_by_entity` do not run: they return `{ status: "queued", proposalId }` and the
+`redact_by_entity` do not run: they return `{ status: "queued", proposalId, revision }` and the
 redaction becomes a **proposal** a person accepts or rejects in the app. On acceptance the
 desktop runs its own verified-removal engine, the survivor scan and the seal, and the
 sealed record says a person decided (`human-desktop`); this path needs no native engine
 on the agent's side. `propose_redactions` is the explicit form of the same thing;
 `get_proposal_status` follows the outcome; the person picks the output path in Omitly's own
-save dialog (`outputPath` is kept as the client's suggestion). Needs an omitly-mcp release that
+save dialog (`outputPath` is kept as the client's suggestion). Regions are tied to the document the agent actually scanned: `find_sensitive_regions` and `locate_text` return an
+opaque `analysisId` (the digest of the bytes that scan read), `redact_pdf` and `propose_redactions` take it as
+`analysisId`, and a proposal whose id is missing, unknown or names another file, or whose file has changed since the scan,
+is refused and nothing is queued (the queued proposal records the scan's `pdfSha256`; `redact_by_entity` carries no
+regions and is bound when it is queued). `revision` is the SHA-256 of the proposal file as written. Needs an omitly-mcp release that
 knows the channel — an older server writes directly. With no desktop running (or the toggle off),
 the write tools behave exactly as before and the record says `mcp-agent` (not
 human-reviewed). The two sides talk through files under the state directory
 (`OMITLY_STATE_DIR`, else `~/.omitly`: `desktop.json`, `proposals/`, `clients/`) — no
 socket, no network. The PDF and the engine stay on this computer; text a client asks for
 (for example `extract_pdf_text`) goes to wherever that client's model runs.
+
+Since the 5.6.0 desktop, its heartbeat also carries a coarse licence note (trial with days
+left, trial over, licensed, updates lapsed) that the server uses only to word its answer to a
+removal request. The server never verifies a licence, and the note can only make it do less
+(it declines to queue a request the app would refuse). The desktop app stays the only enforcer;
+a stale or malformed heartbeat still permits the direct-engine fallback above, and that engine
+keeps its own checks.
 
 ## PDF generation (`create_pdf`)
 
@@ -361,9 +379,9 @@ hostile local user — see `docs/THREAT-MODEL.md`.
 
 `redact_pdf`/`redact_by_entity` are the write surface, enforced **inside the
 engine binary** (not in this server, and not bypassable by the bundled wasm
-fallback — wasm never touches these two tools): a Pro or Personal licence
+fallback — wasm never touches these two tools): an Omitly licence
 (`OMITLY_LICENSE_FILE`, or the Omitly desktop app's activated licence on the
-same machine) runs unmarked; otherwise the shared 14-day trial applies and
+same machine) runs unmarked; otherwise the shared free trial applies (14 days or 5 redacted documents, whichever comes first) and
 the audit output is permanently marked as evaluation output. The redaction
 itself is never degraded, and licence checks never touch the network.
 `find_sensitive_regions`, `locate_text`, `check_redaction`, `verify_redaction`,
@@ -371,21 +389,15 @@ itself is never degraded, and licence checks never touch the network.
 `locate_text`/`verify_redaction`/`verify_seal`/`verify_document`/`extract_pdf_text`
 are free forever with **no cap and no marking** (recipient-side verification and
 on-device extraction are the point, not a metered funnel). The two free
-*detection* tools (`find_sensitive_regions`, `check_redaction`) on the wasm
-tier — i.e. with no native engine configured — are metered (omitly#226):
-results carry an `evaluation: true` flag plus an EVALUATION banner, and after
-10 attempts a month across the two tools (one shared counter; `OMITLY_FREE_CAP`
-changes the number) the tool returns a structured `{ blocked: true, reason: "free-cap" }` refusal
-until the month rolls over. The count lives in `~/.omitly/usage.json`
-(override the directory with `OMITLY_STATE_DIR`; written 0600) and is
-**local-only — nothing ever phones home**; deleting the file resets the free
-count, which is accepted (the no-network doctrine makes it unavoidable), and
-the counter is deliberately never consulted by any paid write path. An
-attempt is counted before the scan runs, so a failed attempt still counts.
-Calls served by a configured native engine (licensed or not) are not metered here — that user is in
-the engine funnel, where the licence rules above apply. `verify_seal` and
+*detection* tools (`find_sensitive_regions`, `check_redaction`) have no usage limit.
+On the wasm tier — i.e. with
+no native engine configured — their results carry an `evaluation: true` flag (the field name is kept) plus a one-sentence
+notice: this scan or check does not remove anything and is not a removal certificate. Nothing is counted
+and no usage file is written; nothing here ever phones home. A scan result carries no purchase or
+trial link; the trial link is shown only in the answer to a request to remove something, when
+there is no engine and the desktop app is not running. `verify_seal` and
 `verify_document` (both native-only) stay free by the same design in
-`crates/omitly-cli` (no Pro/Personal licence check on that command path
+`crates/omitly-cli` (no Omitly licence check on that command path
 either — both tools shell out to the identical `verify_seal` engine command).
 
 ## One-click install for Claude Desktop (MCPB, free tier only)

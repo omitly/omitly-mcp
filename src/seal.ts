@@ -39,6 +39,8 @@ export interface NormalizedSealResult {
    * signal for "altered and relabelled" vs. "genuinely just a newer seal". */
   carriesAuditReport: boolean | null;
   sealFingerprint: string | null;
+  /** errata C1: the verifier's own legacy CAUTION is at warnings[0] exactly when this is true (omitly-seal lib.rs:1087). */
+  legacyUnboundVerdict: boolean | null;
   /** omitly#1588: "classical-era seal (v1)" when the file's seal is v1,
    * whatever its verdict; null for a v2 seal, no seal, or an older engine. */
   sealEraLabel: string | null;
@@ -67,6 +69,12 @@ export interface NormalizedSealResult {
    * `omitly.audit/v2`. Purely diagnostic — never gates `verdict`/`sealValid`
    * above. */
   auditV2Recognized: boolean;
+  /** omitly#1864 (contract §3.5): the v2 seal gate (`audit_v2_seal_valid`); `v2Held` needs it true. null for v1. */
+  auditV2SealValid: boolean | null;
+  /** The v2 seal's own verdict ("valid" | "policy_insufficient" | "invalid" | "unsupported"); null for v1. */
+  sealVerdict: string | null;
+  /** The verifier's notes on a v2 seal (main.rs:1273-1275); null when absent. */
+  sealWarnings: string[] | null;
   /** omitly#1093: why a recognized v2 report still failed semantic
    * validation. Non-null for every real v2 report today — the spec requires
    * registry-owned code to recompute applicability from the presented PDF,
@@ -153,7 +161,10 @@ function expectedVerdict(overall: AuditV2Overall): [UserVerdict, boolean] {
 /** omitly#1104: the v2 verdict fields of an untrusted engine response. Only a
  * recognized v2 report has one; anything missing, unknown or inconsistent is
  * Cannot Verify. */
-export function v2Verdict(res: Record<string, unknown>): {
+export function v2Verdict(
+  res: Record<string, unknown>,
+  opts: { requireGates?: boolean } = {},
+): {
   auditV2Overall: AuditV2Overall | null;
   userVerdict: UserVerdict | null;
   blocking: boolean | null;
@@ -168,6 +179,15 @@ export function v2Verdict(res: Record<string, unknown>): {
   if (overall === null) return cannot;
   const [verdict, blocking] = expectedVerdict(overall);
   if (res.userVerdict !== verdict || res.blocking !== blocking) return cannot;
+  // omitly#1864: an overall exists only when EVERY gate passed, seal first (crates/omitly-seal/src/lib.rs
+  // `verify_report_bytes`: `audit_v2_seal_valid = Some(gate.is_ok())`, `audit_v2_overall` only in the
+  // `Ok(trusted)` arm). A reply that says otherwise (a failed or unstated seal gate, a validation error,
+  // a removed seal) contradicts itself and is never a verdict this server gives.
+  // `requireGates: false` is for the write tools' own audit (`publish_v2`, crates/omitly-cli/src/main.rs),
+  // which the engine just produced and sealed in the same call and which carries no gate fields.
+  if (opts.requireGates !== false) {
+    if (res.auditV2SealValid !== true || typeof res.auditV2ValidationError === "string" || res.sealRemoved === true) return cannot;
+  }
   return { auditV2Overall: overall, userVerdict: verdict, blocking };
 }
 
@@ -209,6 +229,7 @@ export function normalizeSealResult(res: Record<string, unknown>): NormalizedSea
     sealVersion: verdict === "seal_unsupported_version" ? str(res.sealVersion) : null,
     carriesAuditReport: verdict === "seal_unsupported_version" ? bool(res.carriesAuditReport) : null,
     sealFingerprint: str(res.sealFingerprint),
+    legacyUnboundVerdict: bool(res.legacyUnboundVerdict),
     sealEraLabel: res.sealEraLabel === SEAL_ERA_V1_LABEL ? SEAL_ERA_V1_LABEL : null,
     allPassed: bool(res.allPassed),
     metadataScrubbed: bool(res.metadataScrubbed),
@@ -222,6 +243,9 @@ export function normalizeSealResult(res: Record<string, unknown>): NormalizedSea
     sourceFilename: str(res.sourceFilename),
     outputFilename: str(res.outputFilename),
     auditV2Recognized: bool(res.auditV2Recognized) ?? false,
+    auditV2SealValid: bool(res.auditV2SealValid),
+    sealVerdict: str(res.sealVerdict),
+    sealWarnings: strArray(res.sealWarnings),
     auditV2ValidationError: str(res.auditV2ValidationError),
     ...v2,
     // Only beside a v2 report that passed every gate (`auditV2Overall`
@@ -286,3 +310,25 @@ export function userVerdictLabel(verdict: UserVerdict, blocking: boolean | null)
       return "Cannot Verify";
   }
 }
+
+/**
+ * The product notices the CLI appends to a redaction's `warnings` AFTER the engine decides `all_passed`
+ * (crates/omitly-cli/src/main.rs:440-460), as full strings: `licensing::policy::TRIAL_OUTPUT_WARNING` (policy.rs:74-75),
+ * `PERSONAL_USE_WARNING` (policy.rs:83-85) and `license::DEV_KEY_WARNING` (omitly-cli license.rs:56). A Rust `\`-newline
+ * continuation drops the newline and the following indentation; the personal string holds an em dash (U+2014).
+ * Matching is exact equality (contract §5): a notice plus extra text is an engine warning. A notice confers nothing and
+ * denies nothing. `constants-notices.test.ts` compares this list with the Rust source when the crates are present.
+ */
+export const PRODUCT_NOTICES: readonly string[] = [
+  "Marked as evaluation output. The redaction and verification are complete; activate or renew a licence for unmarked audit output.",
+  "Licensed for personal use. This certificate is not firm-nameable and is not represented as a professional or firm work product — an Omitly licence provides that.",
+  "This engine build carries the DEVELOPMENT licence key; its licence state is not meaningful.",
+];
+export const isProductNotice = (w: string): boolean => PRODUCT_NOTICES.includes(w);
+
+/** The verifier's own first line for a valid seal over a pre-omitly#506 report (crates/omitly-seal/src/lib.rs:1088-1093). */
+export const LEGACY_CAUTION_PREFIX = "CAUTION: this file was sealed by a build predating";
+/** Lines the verifier itself adds to `warnings` (not report warnings): lib.rs:1088-1093 (CAUTION), :670-671 and the
+ *  source-comparison line of the invalid branch (UNVERIFIED), :895-897 (an unsupported schema). */
+export const VERIFIER_OWN_PREFIXES: readonly string[] = [LEGACY_CAUTION_PREFIX, "UNVERIFIED: ", "unsupported audit report schema "];
+export const isVerifierOwnLine = (w: string): boolean => VERIFIER_OWN_PREFIXES.some((p) => w.startsWith(p));

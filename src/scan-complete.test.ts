@@ -42,7 +42,6 @@ const ENV_KEYS = [
   "OMITLY_PDF_BIN",
   "OMITLY_ENGINE_DIR",
   "OMITLY_STATE_DIR",
-  "OMITLY_FREE_CAP",
   "OMITLY_ROUTING_STUB_SCAN_COMPLETE",
 ] as const;
 
@@ -149,9 +148,12 @@ test("[real engine] check_redaction over an unreadable page shows INCOMPLETE bef
     assert.equal(res.structuredContent.scanComplete, false);
     assert.equal(res.structuredContent.clean, true, "clean keeps its #538 meaning");
     assert.equal(res.structuredContent.coverage.pagesScanned, 0, "fixture premise: nothing was read");
-    assert.ok(text.startsWith("⛔ INCOMPLETE SCAN"), text);
+    // omitly#1857: the text now starts with the NOT A PASS line (a completed check is not an error
+    // result), and the INCOMPLETE banner is still the next thing, before any clean wording.
+    assert.ok(text.startsWith("⚠️ NOT A PASS — ") && text.split("\n\n")[0]!.includes("INCOMPLETE SCAN"), text);
+    assert.ok(text.includes("\n\n⛔ INCOMPLETE SCAN"), text);
     assert.ok(!text.includes("✅ No recoverable PII found"), text);
-    assert.ok(at(text, "INCOMPLETE SCAN") < at(text, "Nothing found in the part"), text);
+    assert.ok(at(text, "⛔ INCOMPLETE SCAN") < at(text, "The pattern scan listed nothing in the part"), text);
   });
 });
 
@@ -177,7 +179,8 @@ test("[real engine] verify_redaction rescan over an unreadable page never says '
     assert.equal(res.structuredContent.mode, "rescan");
     assert.equal(res.structuredContent.scanComplete, false);
     assert.equal(res.structuredContent.clean, true);
-    assert.ok(text.startsWith("⛔ INCOMPLETE SCAN"), text);
+    assert.ok(text.startsWith("⚠️ NOT A PASS — ") && text.split("\n\n")[0]!.includes("INCOMPLETE SCAN"), text);
+    assert.ok(text.includes("\n\n⛔ INCOMPLETE SCAN"), text);
     assert.ok(!text.includes("No recoverable PII found"), text);
   });
 });
@@ -196,7 +199,9 @@ test("[native] scan_complete: false from the engine leads find_sensitive_regions
       const text = textOf(res);
       assert.equal(res.structuredContent.scanComplete, complete);
       assert.equal(text.includes("INCOMPLETE SCAN"), !complete, text);
-      if (!complete) assert.ok(text.startsWith("⛔ INCOMPLETE SCAN"), text);
+      // omitly#1864: a scan that is not a pass (here: it listed an item) opens with the NOT A PASS line, then the banner.
+      assert.ok(text.startsWith("⚠️ NOT A PASS — 1 sensitive item(s) found"), text);
+      if (!complete) assert.ok(text.includes("\n\n⛔ INCOMPLETE SCAN"), text);
     });
   }
 });
@@ -212,7 +217,8 @@ test("[native] an engine that does not report completeness is treated as not com
     const res: any = await client.callTool({ name: "find_sensitive_regions", arguments: { pdfPath: doc } });
     const text = textOf(res);
     assert.equal(res.structuredContent.scanComplete, false);
-    assert.ok(text.startsWith("⛔ SCAN COMPLETENESS NOT REPORTED"), text);
+    assert.ok(text.startsWith("⚠️ NOT A PASS — 1 sensitive item(s) found; INCOMPLETE SCAN"), text);
+    assert.ok(text.includes("\n\n⛔ SCAN COMPLETENESS NOT REPORTED"), text);
   });
 });
 
@@ -226,11 +232,13 @@ test("[real engine] an image-only PDF is clean:true but incomplete, and the text
     const text = textOf(res);
     assert.equal(res.structuredContent.clean, true);
     assert.equal(res.structuredContent.scanComplete, false);
-    assert.ok(text.startsWith("⛔ INCOMPLETE SCAN"), text);
+    assert.ok(text.startsWith("⚠️ NOT A PASS — ") && text.split("\n\n")[0]!.includes("INCOMPLETE SCAN"), text);
+    assert.ok(text.includes("\n\n⛔ INCOMPLETE SCAN"), text);
     assert.ok(text.includes("1 page(s) are images only and were not text-scanned"), text);
     assert.ok(!text.includes("✅ No recoverable PII found"), text);
     const found: any = await client.callTool({ name: "find_sensitive_regions", arguments: { pdfPath: doc } });
-    assert.ok(textOf(found).startsWith("⛔ INCOMPLETE SCAN"), textOf(found));
+    assert.ok(textOf(found).startsWith("⚠️ NOT A PASS — INCOMPLETE SCAN"), textOf(found));
+    assert.ok(textOf(found).includes("\n\n⛔ INCOMPLETE SCAN"), textOf(found));
     assert.equal(found.structuredContent.scanComplete, false);
   });
 });
@@ -245,13 +253,13 @@ test("[real engine] a complete scan says so before the headline in all three sur
     for (const [name, headline] of [
       ["find_sensitive_regions", "Found "],
       ["check_redaction", "LEAK"],
-      ["verify_redaction", "recoverable item"],
+      ["verify_redaction", "LEAK"],
     ] as const) {
       const res: any = await client.callTool({ name, arguments: { pdfPath: doc } });
       const text = textOf(res);
       assert.equal(res.structuredContent.scanComplete, true, `${name}: ${text}`);
       assert.ok(
-        at(text, "Scan complete: all text on every page and in every stream was read. Images are not OCR'd.") < at(text, headline),
+        at(text, "The pattern scan read every page and stream it found. Images are not OCR'd.") < at(text, headline),
         `${name}: ${text}`,
       );
     }
@@ -268,7 +276,8 @@ test("[native] a complete scan states it first (stub, scan_complete true)", asyn
   });
   await withClient(createServer, async (client) => {
     const res: any = await client.callTool({ name: "find_sensitive_regions", arguments: { pdfPath: doc } });
-    assert.ok(textOf(res).startsWith("✅ Scan complete: all text on every page and in every stream was read. Images are not OCR'd."), textOf(res));
+    // omitly#1864: the stub lists one item, so the text is not a pass and says so first; the completeness line follows.
+    assert.ok(textOf(res).startsWith("⚠️ NOT A PASS — 1 sensitive item(s) found; a pattern scan is not a check of the document: run check_redaction.\n\nℹ️ The pattern scan read every page and stream it found. Images are not OCR'd."), textOf(res));
   });
 });
 
@@ -284,9 +293,35 @@ test("[native] sidecar verify is a region check: no scanComplete, and its text s
     const res: any = await client.callTool({ name: "verify_redaction", arguments: { pdfPath: doc } });
     const text = textOf(res);
     assert.equal(res.structuredContent.mode, "sidecar");
-    assert.equal(res.structuredContent.scanComplete, undefined);
-    assert.ok(text.startsWith("ℹ️ Region check only"), text);
-    assert.ok(text.includes("did NOT scan the whole document"), text);
-    assert.ok(!/no recoverable pii|scan complete/i.test(text), text);
+    // Contract §3.4: the sidecar mode runs this server's own check pipeline; the stub reports no completeness, so the scan is not complete,
+    // and the text ends with the one sidecar note, which says the sidecar is not evidence.
+    assert.equal(res.structuredContent.scanComplete, false);
+    assert.ok(text.startsWith("⚠️ NOT A PASS — "), text);
+    assert.ok(text.includes("⛔ SCAN COMPLETENESS NOT REPORTED"), text);
+    assert.ok(text.endsWith("The sidecar is not evidence: the outcome above comes from this server's own check of the file."), text);
+    assert.ok(!/no recoverable pii|scan complete(?!ness)/i.test(text), text);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Order on the free (wasm) tier: the INCOMPLETE SCAN line first, the one-sentence notice second.
+// ---------------------------------------------------------------------------
+
+test("[wasm] an incomplete scan leads with INCOMPLETE SCAN; the one-sentence notice comes after it", async () => {
+  const { root, doc } = setup("omitly-notice-order-");
+  const { createServer } = await importFresh({ OMITLY_ALLOWED_DIR: root, OMITLY_STATE_DIR: path.join(root, "state") });
+  await withClient(createServer, async (client) => {
+    for (const [name, notice] of [
+      ["find_sensitive_regions", "This scan lists likely sensitive items."],
+      ["check_redaction", "This check finds likely leaks."],
+    ] as const) {
+      const res: any = await client.callTool({ name, arguments: { pdfPath: doc } });
+      const text = textOf(res);
+      assert.equal(res.structuredContent.scanComplete, false, text);
+      // omitly#1857: a check_redaction text that is not a pass opens with the NOT A PASS line, which names it.
+      assert.ok(text.startsWith("⚠️ NOT A PASS — ") && text.split("\n\n")[0]!.includes("INCOMPLETE SCAN"), `${name}: ${text}`);
+      assert.ok(text.includes("⛔ INCOMPLETE SCAN"), `${name}: ${text}`);
+      assert.ok(at(text, "⛔ INCOMPLETE SCAN") < at(text, notice), `${name}: INCOMPLETE before the notice:\n${text}`);
+    }
   });
 });

@@ -10,7 +10,7 @@
  * block near the top) and engine-config.ts.
  *
  * `index.ts` resolves ENGINE_BIN / PDF_BIN / ROOT from `process.env` ONCE at
- * module load (leak-canary.test.ts and free-cap.test.ts each rely on exactly
+ * module load (leak-canary.test.ts and free-scan-uncapped.test.ts each rely on exactly
  * this, and say so in their own top-of-file comments) — so proving BOTH
  * "native configured" and "no native configured" routing in a single file
  * needs a FRESH module instance per configuration, not the one process-wide
@@ -111,7 +111,6 @@ const ENGINE_ENV_KEYS = [
   "OMITLY_PDF_BIN",
   "OMITLY_ENGINE_DIR",
   "OMITLY_STATE_DIR",
-  "OMITLY_FREE_CAP",
   "OMITLY_ROUTING_STUB_LOG",
 ] as const;
 
@@ -151,7 +150,6 @@ function wasmOnlyEnv(root: string) {
     OMITLY_ALLOWED_DIR: root,
     OMITLY_STATE_DIR: path.join(root, "state"),
     // Generous cap: these tests are about routing/results, not the meter.
-    OMITLY_FREE_CAP: "1000",
   } as const;
 }
 
@@ -189,10 +187,11 @@ test("[native] find_sensitive_regions routes to the native engine, not wasm", as
   const { createServer } = await importFresh(nativeEnv(root, logPath));
   await withClient(createServer, async (client) => {
     const res: any = await client.callTool({ name: "find_sensitive_regions", arguments: { pdfPath: doc } });
-    assert.equal(res.isError, undefined);
+    assert.ok(!res.isError);
     assert.equal(res.structuredContent.count, 1, "must be the stub's marker count, not wasm's real 3");
     assert.equal(res.structuredContent.regions[0].kind, "native-stub-marker");
-    assert.equal(res.structuredContent.evaluation, undefined, "a native-engine result is never EVALUATION-marked");
+    assert.equal(res.structuredContent.evaluation, undefined, "a native-engine result never carries the free-tier mark");
+    assert.ok(!textOf(res).includes("is not a removal certificate"), "a native-engine result never carries the free-tier notice");
   });
   const log = readStubLog(logPath);
   assert.equal(log.length, 1);
@@ -209,7 +208,7 @@ test("[native] locate_text routes to the native engine, not wasm", async () => {
       name: "locate_text",
       arguments: { pdfPath: doc, texts: [REAL_EMAIL, REAL_SSN] },
     });
-    assert.equal(res.isError, undefined);
+    assert.ok(!res.isError);
     // The real wasm `locate` on this fixture would return count 2, kind
     // "text" for both (proved below in the wasm-fallback test) — getting the
     // stub's single marker instead proves native, not wasm, answered.
@@ -228,11 +227,13 @@ test("[native] check_redaction routes to the native engine, not wasm", async () 
   const { createServer } = await importFresh(nativeEnv(root, logPath));
   await withClient(createServer, async (client) => {
     const res: any = await client.callTool({ name: "check_redaction", arguments: { pdfPath: doc } });
-    assert.equal(res.isError, true, "the stub's marker counts as a (fake) finding, so this is the 'dirty' branch");
+    // omitly#1857: the 'dirty' branch is a completed check, so it is a result, not a tool failure.
+    assert.equal(res.isError, false, "the stub's marker counts as a (fake) finding, so this is the 'dirty' branch");
     assert.equal(res.structuredContent.clean, false);
     assert.equal(res.structuredContent.totalFindings, 1, "must be the stub's marker count, not wasm's real 3");
     assert.deepEqual(Object.keys(res.structuredContent.byKind), ["native-stub-marker"]);
-    assert.equal(res.structuredContent.evaluation, undefined, "a native-engine result is never EVALUATION-marked");
+    assert.equal(res.structuredContent.evaluation, undefined, "a native-engine result never carries the free-tier mark");
+    assert.ok(!textOf(res).includes("is not a removal certificate"), "a native-engine result never carries the free-tier notice");
     // omitly#1267: the verdict came from the native `check` (the stub's marker),
     // not from the bundled wasm (which reads sample.pdf as safe_to_send).
     assert.equal(res.structuredContent.verdict.verdict, "needs_review");
@@ -260,11 +261,11 @@ test("[native] verify_redaction with a sidecar routes to native 'verify' (not 'f
     const res: any = await client.callTool({ name: "verify_redaction", arguments: { pdfPath: doc } });
     assert.equal(res.isError, false);
     assert.equal(res.structuredContent.mode, "sidecar");
-    assert.equal(res.structuredContent.clean, true);
+    // Contract §3.4: the sidecar mode runs the sidecar `verify` and the check pipeline (find, check); it never passes on the sidecar alone.
+    assert.notEqual(res.structuredContent.outcome, "safe_to_send");
   });
   const log = readStubLog(logPath);
-  assert.equal(log.length, 1);
-  assert.equal(log[0].command, "verify", "sidecar present + native engine must call 'verify', never 'find' or wasm");
+  assert.deepEqual(log.map((l) => l.command), ["verify", "find", "check"], "sidecar present + native engine calls 'verify' and the pipeline, never wasm");
 });
 
 // ---------------------------------------------------------------------------
@@ -278,10 +279,11 @@ test("[wasm] find_sensitive_regions uses wasm and returns the real findings", as
   const { createServer } = await importFresh(wasmOnlyEnv(root));
   await withClient(createServer, async (client) => {
     const res: any = await client.callTool({ name: "find_sensitive_regions", arguments: { pdfPath: doc } });
-    assert.equal(res.isError, undefined);
+    assert.ok(!res.isError);
     assert.equal(res.structuredContent.count, 3);
     assert.deepEqual(res.structuredContent.regions.map((r: any) => r.kind).sort(), REAL_KINDS);
-    assert.equal(res.structuredContent.evaluation, true, "the free/wasm path is EVALUATION-marked");
+    assert.equal(res.structuredContent.evaluation, true, "the free/wasm path carries the free-tier mark");
+    assert.ok(textOf(res).includes("This scan lists likely sensitive items. It does not remove anything and is not a removal certificate."), "and the find notice is in the text");
   });
 });
 
@@ -294,7 +296,7 @@ test("[wasm] locate_text uses wasm and returns the real findings", async () => {
       name: "locate_text",
       arguments: { pdfPath: doc, texts: [REAL_EMAIL, REAL_SSN] },
     });
-    assert.equal(res.isError, undefined);
+    assert.ok(!res.isError);
     assert.equal(res.structuredContent.count, 2);
     assert.ok(res.structuredContent.regions.every((r: any) => r.kind === "text"));
   });
@@ -306,21 +308,23 @@ test("[wasm] check_redaction uses wasm and returns the real findings", async () 
   const { createServer } = await importFresh(wasmOnlyEnv(root));
   await withClient(createServer, async (client) => {
     const res: any = await client.callTool({ name: "check_redaction", arguments: { pdfPath: doc } });
-    assert.equal(res.isError, true);
+    assert.equal(res.isError, false, "omitly#1857: a completed check is a result, not a tool failure");
     assert.equal(res.structuredContent.clean, false);
     assert.equal(res.structuredContent.totalFindings, 3);
     assert.deepEqual(Object.keys(res.structuredContent.byKind).sort(), REAL_KINDS);
     assert.equal(res.structuredContent.evaluation, true);
-    // omitly#1267: the bundled wasm's `check`. sample.pdf's identifiers are
-    // VISIBLE page text: the pattern findings above flag them, while the
-    // presented check (hidden, covered and recoverable content) passes.
+    assert.ok(textOf(res).includes("This check finds likely leaks. It does not remove anything and is not a removal certificate."), "the check notice is in the text");
+    // omitly#1267: the bundled wasm's `check`. sample.pdf's identifiers are VISIBLE page text: the
+    // presented check (hidden, covered and recoverable content) passes, but omitly#1864: a result
+    // that lists findings is never Safe to Send, so the verdict is Needs Review (not blocking).
     const v = res.structuredContent.verdict;
-    assert.equal(v.verdict, "safe_to_send");
+    assert.equal(v.verdict, "needs_review");
     assert.equal(v.blocking, false);
     assert.equal(v.reason_code, null);
     assert.equal("report" in v, false, "the audit v2 report is not a tool output");
     assert.ok(v.result.checked.length > 0);
-    assert.match(textOf(res), /Check verdict: Safe to Send\./);
+    assert.match(textOf(res), /Check verdict: Needs Review\./);
+    assert.doesNotMatch(textOf(res), /Safe to Send/);
     assert.match(textOf(res), /not a statement that the document is safe/);
   });
 });
@@ -331,7 +335,7 @@ test("[wasm] verify_redaction (no native engine at all) uses wasm and returns th
   const { createServer } = await importFresh(wasmOnlyEnv(root));
   await withClient(createServer, async (client) => {
     const res: any = await client.callTool({ name: "verify_redaction", arguments: { pdfPath: doc } });
-    assert.equal(res.isError, true);
+    assert.equal(res.isError, false, "contract §3.3: a re-scan is a completed check");
     assert.equal(res.structuredContent.mode, "rescan", "no native engine at all — only 'rescan' is reachable");
     assert.equal(res.structuredContent.clean, false);
     assert.equal(res.structuredContent.totalFindings, 3);
@@ -357,11 +361,11 @@ test("[branches] verify_redaction: native+sidecar -> native verify; native+no-si
     await withClient(createServer, async (client) => {
       const res: any = await client.callTool({ name: "verify_redaction", arguments: { pdfPath: doc } });
       assert.equal(res.structuredContent.mode, "sidecar");
-      assert.equal(res.structuredContent.clean, true);
+      assert.notEqual(res.structuredContent.outcome, "safe_to_send");
     });
     assert.deepEqual(
       readStubLog(logPath).map((e) => e.command),
-      ["verify"],
+      ["verify", "find", "check"],
     );
   }
 
@@ -381,8 +385,8 @@ test("[branches] verify_redaction: native+sidecar -> native verify; native+no-si
     });
     assert.deepEqual(
       readStubLog(logPath).map((e) => e.command),
-      ["find"],
-      "no-sidecar fallback must call native 'find', never 'verify' and never touch wasm",
+      ["find", "check"],
+      "no-sidecar fallback runs the native pipeline (find, check), never 'verify' and never touches wasm",
     );
   }
 
@@ -420,7 +424,8 @@ test("[no-engine] redact_pdf refuses outright — never falls back to wasm", asy
     });
     assert.equal(res.isError, true);
     assert.equal(res.structuredContent, undefined);
-    assert.match(textOf(res), /No redaction engine configured/);
+    // omitly#1861: the refusal is the designed removal text, not the engine-config error.
+    assert.match(textOf(res), /^Nothing was removed\./);
     assert.equal(existsSync(outputPath), false, "nothing should have been written");
   });
 });
@@ -437,7 +442,8 @@ test("[no-engine] redact_by_entity refuses outright — never falls back to wasm
     });
     assert.equal(res.isError, true);
     assert.equal(res.structuredContent, undefined);
-    assert.match(textOf(res), /No redaction engine configured/);
+    // omitly#1861: the refusal is the designed removal text, not the engine-config error.
+    assert.match(textOf(res), /^Nothing was removed\./);
     assert.equal(existsSync(outputPath), false);
   });
 });
@@ -469,7 +475,7 @@ test("[native] redact_pdf routes to the native engine (never wasm)", async () =>
       name: "redact_pdf",
       arguments: { pdfPath: doc, outputPath, regions: [{ page: 0, x: 1, y: 2, width: 3, height: 4 }] },
     });
-    assert.equal(res.isError, undefined);
+    assert.ok(!res.isError);
     assert.equal(res.structuredContent.output, outputPath);
     assert.equal(readFileSync(outputPath, "utf8"), "NATIVE-STUB-REDACTED-OUTPUT");
   });
@@ -490,7 +496,7 @@ test("[native] redact_by_entity routes to the native engine (never wasm)", async
       name: "redact_by_entity",
       arguments: { pdfPath: doc, outputPath },
     });
-    assert.equal(res.isError, undefined);
+    assert.ok(!res.isError);
     assert.equal(res.structuredContent.output, outputPath);
     assert.equal(res.structuredContent.redactedCount, 1);
     assert.equal(res.structuredContent.redacted[0].kind, "native-stub-marker");
@@ -512,7 +518,7 @@ test("[native] create_pdf routes to the native engine (never wasm)", async () =>
       name: "create_pdf",
       arguments: { outputPath, source: "# Hello" },
     });
-    assert.equal(res.isError, undefined);
+    assert.ok(!res.isError);
     assert.equal(res.structuredContent.output, outputPath);
     assert.equal(readFileSync(outputPath, "utf8"), "NATIVE-STUB-CREATED-PDF");
   });
@@ -537,7 +543,7 @@ test("[wasm] extract_pdf_text (no native engine) uses wasm and returns the real 
       name: "extract_pdf_text",
       arguments: { pdfPath: doc },
     });
-    assert.equal(res.isError, undefined);
+    assert.ok(!res.isError);
     assert.equal(res.structuredContent.masked, true);
     const spans = res.structuredContent.pages.flatMap((p: any) => p.spans);
     assert.deepEqual(spans.map((s: any) => s.kind).sort(), REAL_KINDS);
@@ -557,7 +563,7 @@ test("[wasm] extract_pdf_text masked:false returns raw text, and a regions filte
       name: "extract_pdf_text",
       arguments: { pdfPath: doc, masked: false, regions: ["us"] },
     });
-    assert.equal(res.isError, undefined);
+    assert.ok(!res.isError);
     assert.equal(res.structuredContent.masked, false);
     assert.match(res.structuredContent.note ?? "", /needs a native engine/);
     const allText = res.structuredContent.pages.map((p: any) => p.text).join("\n");
@@ -575,7 +581,7 @@ test("[native] extract_pdf_text routes to the native engine", async () => {
       name: "extract_pdf_text",
       arguments: { pdfPath: doc },
     });
-    assert.equal(res.isError, undefined);
+    assert.ok(!res.isError);
     assert.equal(res.structuredContent.pages[0].text, "NATIVE-STUB-EXTRACTED-TEXT");
     assert.equal(res.structuredContent.pages[0].spans[0].kind, "native-stub-marker");
   });

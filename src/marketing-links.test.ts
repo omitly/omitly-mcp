@@ -4,7 +4,7 @@
  *
  * Oracle: the real shipped files (compiled dist/*.js, the MCPB server, the
  * skill, plugin and manifest files), read from disk. Nothing is reimplemented.
- * Exempt, on purpose: /support and /privacy (not marketing), releases.omitly.app
+ * Exempt, on purpose: /support, /privacy and /eula (not marketing), releases.omitly.app
  * (a different host, so never matched), LICENSE and THIRD-PARTY-NOTICES (not
  * scanned), server.json (registry metadata, not scanned) and code comments.
  */
@@ -13,13 +13,16 @@ import { test } from "node:test";
 import { readdirSync, readFileSync } from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { freeCapRefusal, OMITLY_SITE_URL } from "./usage.js";
+import { OMITLY_SITE_URL } from "./usage.js";
+import { removalNeedsAppText } from "./removal.js";
 
 // dist/marketing-links.test.js -> package root is one level up.
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const SITE = /https?:\/\/(?:www\.)?omitly\.app(?![\w.-])([^\s"'`)\]>]*)/g;
-const EXEMPT_PATH = /^\/(?:support|privacy)(?:[/?#]|$)/;
+// /eula is the legal agreement, not marketing: like /support and /privacy it carries no tracking tag. A bare
+// /eula may be followed by sentence punctuation (the README line ends "https://omitly.app/eula.").
+const EXEMPT_PATH = /^\/(?:support|privacy)(?:[/?#]|$)|^\/eula(?:[/?#]|[.,;:!]*$)/;
 const TAGGED = /[?&]via=mcp(?:[&#]|$)/;
 
 // On-disk path for a POSIX-style relative path (Windows accepts "/" but join normalises).
@@ -46,6 +49,11 @@ const SCANNED = [
   "README.md",
 ];
 
+// Listing text (omitly directory pages): ONE plain "Made by Omitly: https://omitly.app" each, no
+// tag, no trial/pricing/buy wording (owner ruling, 12 Nov 2026). Everything else stays tagged.
+const LISTING_FILES = ["plugin/README.md", "mcpb/manifest.json"];
+const MADE_BY = /Made by Omitly: https:\/\/omitly\.app(?![\w./?#-])/g;
+
 const isComment = (line: string) => /^\s*(?:\/\/|\/\*|\*)/.test(line);
 
 function untaggedLinks(rel: string): string[] {
@@ -54,7 +62,8 @@ function untaggedLinks(rel: string): string[] {
     .split("\n")
     .forEach((line, i) => {
       if (rel.endsWith(".js") && isComment(line)) return;
-      for (const m of line.matchAll(SITE)) {
+      const madeBy = LISTING_FILES.includes(rel) ? line.replace(MADE_BY, "") : line;
+      for (const m of madeBy.matchAll(SITE)) {
         const rest = m[1];
         if (EXEMPT_PATH.test(rest) || TAGGED.test(rest)) continue;
         bad.push(`${rel}:${i + 1}: ${m[0]}`);
@@ -80,10 +89,29 @@ test("no marketing link to omitly.app lacks ?via=mcp", () => {
   assert.deepEqual(bad, [], `untagged marketing links:\n${bad.join("\n")}`);
 });
 
-test("the free-cap refusal message links the tagged URL, cleanly delimited", () => {
-  const msg = freeCapRefusal("check_redaction", {
-    capped: true, used: 11, cap: 10, month: "2026-11",
-  }).message;
+test("the /eula exemption is as narrow as /privacy: legal links need no tag, every other untagged link still fails", () => {
+  const passes = (rest: string) => EXEMPT_PATH.test(rest) || TAGGED.test(rest);
+  for (const ok of ["/eula", "/eula/", "/eula.", "/eula,", "/eula?x=1", "/eula#terms", "/pricing?via=mcp"]) {
+    assert.ok(passes(ok), `${ok} should pass`);
+  }
+  for (const bad of ["/eula-anything", "/eula.html", "/eulas", "/", "/pricing", "/download/", "/?ref=x"]) {
+    assert.ok(!passes(bad), `${bad} should fail`);
+  }
+});
+
+test("the removal-request text links the tagged URL, cleanly delimited", () => {
+  const msg = removalNeedsAppText();
   assert.equal(OMITLY_SITE_URL, "https://omitly.app/?via=mcp");
-  assert.match(msg, /https:\/\/omitly\.app\/\?via=mcp(?= )/);
+  assert.match(msg, /https:\/\/omitly\.app\/\?via=mcp(?=\n)/);
+});
+
+test("listing text carries exactly one plain 'Made by Omitly' link, with no tag and no trial, pricing or buy wording", () => {
+  for (const rel of LISTING_FILES) {
+    const text = readFileSync(abs(rel), "utf8");
+    assert.equal([...text.matchAll(MADE_BY)].length, 1, `${rel}: exactly one "Made by Omitly: https://omitly.app"`);
+    const all = [...text.matchAll(SITE)].filter((m) => !EXEMPT_PATH.test(m[1]));
+    // Other links in manifest.json are the author/homepage fields, which keep their tags.
+    assert.ok(all.filter((m) => m[1] === "").length === 1, `${rel}: one bare omitly.app link`);
+    assert.doesNotMatch(text, /free to try|14[- ]day|\btrial\b|pricing|\bbuy\b|purchase|licensed Omitly/i, `${rel}: no promotional wording`);
+  }
 });

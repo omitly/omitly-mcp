@@ -44,7 +44,6 @@ const ENV_KEYS = [
   "OMITLY_PDF_BIN",
   "OMITLY_ENGINE_DIR",
   "OMITLY_STATE_DIR",
-  "OMITLY_FREE_CAP",
 ] as const;
 
 let counter = 0;
@@ -139,6 +138,24 @@ test("reports trial days left without inventing a tier", async () => {
   assert.equal(res.structuredContent.daysLeft, 9);
   assert.equal(res.structuredContent.tier, null);
   assert.match(textOf(res), /9 days left/);
+  assert.match(textOf(res), /ends after 14 days or 5 redacted documents, whichever comes first/);
+});
+
+// The CLI reports a trial whose documents are used (and one whose days are over) as
+// `trial_expired` (the closed state set is kept), so the summary must be true of both.
+test("a trial that has ended says so in terms that are true of days and of documents", async () => {
+  const res = await callCheckLicense({
+    ...LICENSED,
+    state: "trial_expired",
+    tier: null,
+    daysLeft: null,
+    licensedTo: null,
+    resolutionStep: null,
+    deviceBound: false,
+  });
+  assert.equal(res.structuredContent.state, "trial_expired");
+  assert.match(textOf(res), /The free trial has ended \(14 days or 5 redacted documents, whichever comes first\)/);
+  assert.doesNotMatch(textOf(res), /14-day/);
 });
 
 test("a dev-key build says its licensed status is not a provenance claim", async () => {

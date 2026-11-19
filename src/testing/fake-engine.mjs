@@ -14,6 +14,7 @@
  * server never puts a raw canary string into a tool response, which is the
  * thing this fixture is for.
  */
+import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 
 /** Mirrors the shape (not the exact algorithm) of `mask_preview` in
@@ -78,9 +79,13 @@ function handle(req) {
     case "find": {
       const content = readFileSync(req.pdfPath, "utf8");
       const candidates = findCandidates(content);
+      // The real engine's full `find` contract (omitly#1864: the server reads it strictly).
       return {
         ok: true,
+        scan_complete: true,
+        clean: candidates.length === 0,
         count: candidates.length,
+        total_findings: candidates.length,
         regions: candidates.map((c) => ({
           page: c.page,
           x: c.x,
@@ -89,7 +94,12 @@ function handle(req) {
           height: c.height,
           kind: c.kind,
           preview: maskPreview(c.text),
+          // On the real native `find`'s page regions (crates/omitly-cli/src/main.rs `do_find`).
+          under_redaction: false,
         })),
+        survivors: [],
+        off_page: [],
+        coverage: { pages_total: 1, pages_scanned: 1, pages_failed: [], not_scanned: [], prior_revisions_scanned: false, metadata_scanned: false, acroform_scanned: false, attachments_scanned: false, form_xobjects_scanned: 0, annotation_appearances_scanned: 0, raster_pages: [], raster_only_pages: [], scan_complete: true },
       };
     }
     case "locate_text": {
@@ -166,7 +176,12 @@ function handle(req) {
           userVerdict: "safe_to_send",
           blocking: false,
           auditV2Overall: "pass",
-          result: { state: "safe_to_send", blocking: false },
+          // The Verify screen's rendering (`audit_v2_view`, main.rs `publish_v2`): a whole safe CheckResult.
+          result: {
+            state: "safe_to_send", blocking: false, summary: "Fake engine: every check passed.", pagesTotal: 1, pagesRead: 1,
+            checked: [{ text: "Fake engine check" }], notChecked: [], problems: [], review: [], information: [], decisions: [], reasons: [],
+            checkedAt: "2026-11-11T06:02:00Z", omitlyVersion: "0.0.0", sha256: "c".repeat(64), sizeBytes: 10, canWrite: false, producer: null,
+          },
           sealFingerprint: "00:11:22:33",
         },
       };
@@ -188,11 +203,15 @@ function handle(req) {
           { class: "incremental-revisions", verification: { result: "pass" } },
           { class: "hidden-layers", verification: { result: "pass" } },
           { class: "comment-annotations", verification: { result: "pass" } },
+          { class: "signature-identity", verification: { result: "pass" } },
           { class: "semantic-text", verification: { result: "pass" } },
           { class: "labels", verification: { result: "pass" } },
           { class: "redacted-text-in-strings", verification: { result: "pass" } },
         ],
         disclosures: [],
+        scan_performed: false,
+        license: null,
+        warnings: [],
       };
     }
     case "extract_text": {
@@ -241,6 +260,8 @@ function handle(req) {
         sealEraLabel: "classical-era seal (v1)",
         allPassed: true,
         metadataScrubbed: true,
+        // The verifier's flag for a pre-#506 seal (main.rs verified reply); this fixture is a current-build report.
+        legacyUnboundVerdict: false,
         regionCount: 3,
         pageCount: 1,
         warnings: [],
@@ -255,6 +276,39 @@ function handle(req) {
         outputSha256: "b".repeat(64),
         sourceFilename: "canary.pdf",
         outputFilename: "canary.pdf",
+      };
+    }
+    case "check": {
+      // omitly#1857: check_redaction calls `check` after `find`. An engine with no `check` is an
+      // execution failure (isError:true), so the fake answers with a COMPLETED verdict: fixed
+      // copy only, never document text.
+      return {
+        ok: true,
+        check: {
+          verdict: "safe_to_send",
+          blocking: false,
+          reason_code: null,
+          result: {
+            state: "safe_to_send",
+            blocking: false,
+            summary: "Fake engine: nothing hidden was found.",
+            pagesTotal: 1,
+            pagesRead: 1,
+            checked: [{ text: "Fake engine check" }],
+            notChecked: [],
+            problems: [],
+            review: [],
+            information: [],
+            decisions: [],
+            reasons: [],
+            checkedAt: "2026-11-11T06:02:00Z",
+            omitlyVersion: "0.0.0",
+            sha256: createHash("sha256").update(readFileSync(req.pdfPath)).digest("hex"), // contract C3: bound to the file
+            sizeBytes: 10,
+            canWrite: false,
+            producer: null,
+          },
+        },
       };
     }
     case "create": {

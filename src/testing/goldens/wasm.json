@@ -1,0 +1,1361 @@
+{
+ "engine": "leakcheck-wasm (npm run build:wasm)",
+ "scan": [
+  {
+   "pdf": "(redact_entities output of tests/fixtures/sample.pdf)",
+   "reply": {
+    "ok": true,
+    "scan_complete": true,
+    "count": 0,
+    "clean": true,
+    "total_findings": 0,
+    "by_kind": {},
+    "leaks": [],
+    "survivors": [],
+    "off_page": [],
+    "coverage": {
+     "pages_total": 2,
+     "pages_scanned": 2,
+     "pages_failed": [],
+     "survivor_pages_failed": [],
+     "prior_revisions_scanned": false,
+     "prior_revisions_failed": [],
+     "metadata_scanned": false,
+     "acroform_scanned": false,
+     "attachments_scanned": true,
+     "form_xobjects_scanned": 0,
+     "annotation_appearances_scanned": 0,
+     "embedded_streams_failed": 0,
+     "acroform_tree_incomplete": false,
+     "xmp_stream_unread": false,
+     "attachment_content_unread": false,
+     "attachment_tree_unread": false,
+     "not_scanned": [],
+     "raster_pages": [],
+     "raster_only_pages": [],
+     "scan_complete": true
+    },
+    "error": null
+   }
+  },
+  {
+   "pdf": "tests/fixtures/sample.pdf",
+   "reply": {
+    "ok": true,
+    "scan_complete": true,
+    "count": 3,
+    "clean": false,
+    "total_findings": 3,
+    "by_kind": {
+     "card": 1,
+     "email": 1,
+     "ssn": 1
+    },
+    "leaks": [
+     {
+      "page": 0,
+      "kind": "ssn",
+      "preview": "•••-••-6789",
+      "x": 203.384,
+      "y": 610.4,
+      "width": 68.03999999999999,
+      "height": 14.399999999999977
+     },
+     {
+      "page": 0,
+      "kind": "email",
+      "preview": "••••.•••@••••••e.com",
+      "x": 207.18799999999996,
+      "y": 588.4,
+      "width": 129.756,
+      "height": 14.399999999999977
+     },
+     {
+      "page": 1,
+      "kind": "card",
+      "preview": "•••• •••• •••• 1111",
+      "x": 150.04399999999998,
+      "y": 654.4,
+      "width": 116.75999999999999,
+      "height": 14.399999999999977
+     }
+    ],
+    "survivors": [],
+    "off_page": [],
+    "coverage": {
+     "pages_total": 2,
+     "pages_scanned": 2,
+     "pages_failed": [],
+     "survivor_pages_failed": [],
+     "prior_revisions_scanned": false,
+     "prior_revisions_failed": [],
+     "metadata_scanned": true,
+     "acroform_scanned": false,
+     "attachments_scanned": false,
+     "form_xobjects_scanned": 0,
+     "annotation_appearances_scanned": 0,
+     "embedded_streams_failed": 0,
+     "acroform_tree_incomplete": false,
+     "xmp_stream_unread": false,
+     "attachment_content_unread": false,
+     "attachment_tree_unread": false,
+     "not_scanned": [],
+     "raster_pages": [],
+     "raster_only_pages": [],
+     "scan_complete": true
+    },
+    "error": null
+   }
+  },
+  {
+   "pdf": "tests/fixtures/clean-text.pdf",
+   "reply": {
+    "ok": true,
+    "scan_complete": true,
+    "count": 0,
+    "clean": true,
+    "total_findings": 0,
+    "by_kind": {},
+    "leaks": [],
+    "survivors": [],
+    "off_page": [],
+    "coverage": {
+     "pages_total": 1,
+     "pages_scanned": 1,
+     "pages_failed": [],
+     "survivor_pages_failed": [],
+     "prior_revisions_scanned": false,
+     "prior_revisions_failed": [],
+     "metadata_scanned": true,
+     "acroform_scanned": false,
+     "attachments_scanned": false,
+     "form_xobjects_scanned": 0,
+     "annotation_appearances_scanned": 0,
+     "embedded_streams_failed": 0,
+     "acroform_tree_incomplete": false,
+     "xmp_stream_unread": false,
+     "attachment_content_unread": false,
+     "attachment_tree_unread": false,
+     "not_scanned": [],
+     "raster_pages": [],
+     "raster_only_pages": [],
+     "scan_complete": true
+    },
+    "error": null
+   }
+  },
+  {
+   "pdf": "tests/fixtures/covered-text.pdf",
+   "reply": {
+    "ok": true,
+    "scan_complete": true,
+    "count": 1,
+    "clean": false,
+    "total_findings": 2,
+    "by_kind": {
+     "email": 1
+    },
+    "leaks": [
+     {
+      "page": 0,
+      "kind": "email",
+      "preview": "••.••••@••••••e.com",
+      "x": 171.364,
+      "y": 676.4,
+      "width": 121.54800000000003,
+      "height": 14.399999999999977
+     }
+    ],
+    "survivors": [
+     {
+      "page": 0,
+      "kind": "email",
+      "preview": "•••• •••••• ••.••••@••••••e.com",
+      "x": 100,
+      "y": 676.4,
+      "width": 192.91200000000003,
+      "height": 14.399999999999977
+     }
+    ],
+    "off_page": [],
+    "coverage": {
+     "pages_total": 1,
+     "pages_scanned": 1,
+     "pages_failed": [],
+     "survivor_pages_failed": [],
+     "prior_revisions_scanned": false,
+     "prior_revisions_failed": [],
+     "metadata_scanned": false,
+     "acroform_scanned": false,
+     "attachments_scanned": false,
+     "form_xobjects_scanned": 0,
+     "annotation_appearances_scanned": 0,
+     "embedded_streams_failed": 0,
+     "acroform_tree_incomplete": false,
+     "xmp_stream_unread": false,
+     "attachment_content_unread": false,
+     "attachment_tree_unread": false,
+     "not_scanned": [],
+     "raster_pages": [],
+     "raster_only_pages": [],
+     "scan_complete": true
+    },
+    "error": null
+   }
+  },
+  {
+   "pdf": "tests/fixtures/invisible-text.pdf",
+   "reply": {
+    "ok": true,
+    "scan_complete": true,
+    "count": 0,
+    "clean": true,
+    "total_findings": 0,
+    "by_kind": {},
+    "leaks": [],
+    "survivors": [],
+    "off_page": [],
+    "coverage": {
+     "pages_total": 1,
+     "pages_scanned": 1,
+     "pages_failed": [],
+     "survivor_pages_failed": [],
+     "prior_revisions_scanned": false,
+     "prior_revisions_failed": [],
+     "metadata_scanned": false,
+     "acroform_scanned": false,
+     "attachments_scanned": false,
+     "form_xobjects_scanned": 0,
+     "annotation_appearances_scanned": 0,
+     "embedded_streams_failed": 0,
+     "acroform_tree_incomplete": false,
+     "xmp_stream_unread": false,
+     "attachment_content_unread": false,
+     "attachment_tree_unread": false,
+     "not_scanned": [],
+     "raster_pages": [],
+     "raster_only_pages": [],
+     "scan_complete": true
+    },
+    "error": null
+   }
+  },
+  {
+   "pdf": "tests/fixtures/encrypted-aes256-survivor.pdf",
+   "reply": {
+    "ok": true,
+    "scan_complete": false,
+    "count": 0,
+    "clean": true,
+    "total_findings": 0,
+    "by_kind": {},
+    "leaks": [],
+    "survivors": [],
+    "off_page": [],
+    "coverage": {
+     "pages_total": 1,
+     "pages_scanned": 0,
+     "pages_failed": [
+      0
+     ],
+     "survivor_pages_failed": [
+      0
+     ],
+     "prior_revisions_scanned": false,
+     "prior_revisions_failed": [],
+     "metadata_scanned": true,
+     "acroform_scanned": false,
+     "attachments_scanned": false,
+     "form_xobjects_scanned": 0,
+     "annotation_appearances_scanned": 0,
+     "embedded_streams_failed": 1,
+     "acroform_tree_incomplete": false,
+     "xmp_stream_unread": false,
+     "attachment_content_unread": false,
+     "attachment_tree_unread": false,
+     "not_scanned": [
+      "1 embedded content stream(s) that failed to parse or could not be fully decoded",
+      "1 page(s) could not be fully checked for text surviving under a redaction mark (the content stream failed to decode, a cover could not be followed, or the characters under it could not be determined) — a redaction on this page is unproven, not confirmed clean",
+      "the file's structure (object streams, cross-reference data or stream lengths) did not read the same way twice, so some objects may not have been read: the file is encrypted and could not be opened (a password is needed), so none of it was read; object 1 is listed in the cross-reference table but could not be read; object 2 is listed in the cross-reference table but could not be read; object 3 is recorded as entry 0 of object stream 2, which does not hold it there; object 4 is recorded as entry 1 of object stream 2, which does not hold it there; and 4 more"
+     ],
+     "raster_pages": [],
+     "raster_only_pages": [],
+     "scan_complete": false
+    },
+    "error": null
+   }
+  },
+  {
+   "pdf": "tests/fixtures/au-corpus/05-scanned-raster.pdf",
+   "reply": {
+    "ok": true,
+    "scan_complete": false,
+    "count": 0,
+    "clean": true,
+    "total_findings": 0,
+    "by_kind": {},
+    "leaks": [],
+    "survivors": [],
+    "off_page": [],
+    "coverage": {
+     "pages_total": 1,
+     "pages_scanned": 1,
+     "pages_failed": [],
+     "survivor_pages_failed": [],
+     "prior_revisions_scanned": false,
+     "prior_revisions_failed": [],
+     "metadata_scanned": true,
+     "acroform_scanned": false,
+     "attachments_scanned": false,
+     "form_xobjects_scanned": 0,
+     "annotation_appearances_scanned": 0,
+     "embedded_streams_failed": 0,
+     "acroform_tree_incomplete": false,
+     "xmp_stream_unread": false,
+     "attachment_content_unread": false,
+     "attachment_tree_unread": false,
+     "not_scanned": [
+      "1 page(s) are effectively image-only (raster content, fewer than 100 extractable text characters) — this build never OCRs, so any text inside those images was not read"
+     ],
+     "raster_pages": [
+      0
+     ],
+     "raster_only_pages": [
+      0
+     ],
+     "scan_complete": false
+    },
+    "error": null
+   }
+  },
+  {
+   "pdf": "tests/fixtures/au-corpus/07-incremental-update-prior-revision.pdf",
+   "reply": {
+    "ok": true,
+    "scan_complete": true,
+    "count": 0,
+    "clean": false,
+    "total_findings": 3,
+    "by_kind": {},
+    "leaks": [],
+    "survivors": [],
+    "off_page": [
+     {
+      "source": "prior-revision",
+      "kind": "tfn",
+      "preview": "••• ••• ••2 587"
+     },
+     {
+      "source": "prior-revision",
+      "kind": "bsb",
+      "preview": "••• ••1-050"
+     },
+     {
+      "source": "prior-revision",
+      "kind": "abn",
+      "preview": "••• •• ••• ••8 563"
+     }
+    ],
+    "coverage": {
+     "pages_total": 1,
+     "pages_scanned": 1,
+     "pages_failed": [],
+     "survivor_pages_failed": [],
+     "prior_revisions_scanned": true,
+     "prior_revisions_failed": [],
+     "metadata_scanned": true,
+     "acroform_scanned": false,
+     "attachments_scanned": false,
+     "form_xobjects_scanned": 0,
+     "annotation_appearances_scanned": 0,
+     "embedded_streams_failed": 0,
+     "acroform_tree_incomplete": false,
+     "xmp_stream_unread": false,
+     "attachment_content_unread": false,
+     "attachment_tree_unread": false,
+     "not_scanned": [],
+     "raster_pages": [],
+     "raster_only_pages": [],
+     "scan_complete": true
+    },
+    "error": null
+   }
+  },
+  {
+   "pdf": "tests/fixtures/au-corpus/08-acroform-fields.pdf",
+   "reply": {
+    "ok": true,
+    "scan_complete": true,
+    "count": 0,
+    "clean": false,
+    "total_findings": 6,
+    "by_kind": {},
+    "leaks": [],
+    "survivors": [],
+    "off_page": [
+     {
+      "source": "form-field",
+      "kind": "tfn",
+      "preview": "••• ••8 327"
+     },
+     {
+      "source": "form-field",
+      "kind": "abn",
+      "preview": "•• ••• ••8 787"
+     },
+     {
+      "source": "form-field",
+      "kind": "card",
+      "preview": "•••• •••• •••• 9655"
+     },
+     {
+      "source": "annotation:page1",
+      "kind": "tfn",
+      "preview": "••• ••8 327"
+     },
+     {
+      "source": "annotation:page1",
+      "kind": "abn",
+      "preview": "•• ••• ••8 787"
+     },
+     {
+      "source": "annotation:page1",
+      "kind": "card",
+      "preview": "•••• •••• •••• 9655"
+     }
+    ],
+    "coverage": {
+     "pages_total": 1,
+     "pages_scanned": 1,
+     "pages_failed": [],
+     "survivor_pages_failed": [],
+     "prior_revisions_scanned": false,
+     "prior_revisions_failed": [],
+     "metadata_scanned": true,
+     "acroform_scanned": true,
+     "attachments_scanned": false,
+     "form_xobjects_scanned": 0,
+     "annotation_appearances_scanned": 6,
+     "embedded_streams_failed": 0,
+     "acroform_tree_incomplete": false,
+     "xmp_stream_unread": false,
+     "attachment_content_unread": false,
+     "attachment_tree_unread": false,
+     "not_scanned": [],
+     "raster_pages": [],
+     "raster_only_pages": [],
+     "scan_complete": true
+    },
+    "error": null
+   }
+  },
+  {
+   "pdf": "scripts/fixtures/leakcheck/form-xobject-under-box.pdf",
+   "reply": {
+    "ok": true,
+    "scan_complete": true,
+    "count": 0,
+    "clean": false,
+    "total_findings": 5,
+    "by_kind": {},
+    "leaks": [],
+    "survivors": [
+     {
+      "page": 0,
+      "kind": "email",
+      "preview": "••••••• •••••.••••@•••••••.••• ••• ••• ••• ••• •••• •••• •••• •••• •••• ••••• •••• ••5 678",
+      "x": 50,
+      "y": 696.7,
+      "width": 490.5559999999996,
+      "height": 13.199999999999932
+     }
+    ],
+    "off_page": [
+     {
+      "source": "form-xobject:page1/X1",
+      "kind": "email",
+      "preview": "•••••.••••@••••••e.com"
+     },
+     {
+      "source": "form-xobject:page1/X1",
+      "kind": "tfn",
+      "preview": "••• ••• ••6 782"
+     },
+     {
+      "source": "form-xobject:page1/X1",
+      "kind": "card",
+      "preview": "•••• •••• •••• 1111"
+     },
+     {
+      "source": "form-xobject:page1/X1",
+      "kind": "phone",
+      "preview": "•••• ••5 678"
+     }
+    ],
+    "coverage": {
+     "pages_total": 1,
+     "pages_scanned": 1,
+     "pages_failed": [],
+     "survivor_pages_failed": [],
+     "prior_revisions_scanned": false,
+     "prior_revisions_failed": [],
+     "metadata_scanned": false,
+     "acroform_scanned": false,
+     "attachments_scanned": false,
+     "form_xobjects_scanned": 1,
+     "annotation_appearances_scanned": 0,
+     "embedded_streams_failed": 0,
+     "acroform_tree_incomplete": false,
+     "xmp_stream_unread": false,
+     "attachment_content_unread": false,
+     "attachment_tree_unread": false,
+     "not_scanned": [],
+     "raster_pages": [],
+     "raster_only_pages": [],
+     "scan_complete": true
+    },
+    "error": null
+   }
+  },
+  {
+   "pdf": "(generated: tests/fixtures/covered-text.pdf plus a 66 MiB unreferenced stream)",
+   "reply": {
+    "ok": true,
+    "scan_complete": true,
+    "count": 1,
+    "clean": false,
+    "total_findings": 2,
+    "by_kind": {
+     "email": 1
+    },
+    "leaks": [
+     {
+      "page": 0,
+      "kind": "email",
+      "preview": "••.••••@••••••e.com",
+      "x": 171.364,
+      "y": 676.4,
+      "width": 121.54800000000003,
+      "height": 14.399999999999977
+     }
+    ],
+    "survivors": [
+     {
+      "page": 0,
+      "kind": "email",
+      "preview": "•••• •••••• ••.••••@••••••e.com",
+      "x": 100,
+      "y": 676.4,
+      "width": 192.91200000000003,
+      "height": 14.399999999999977
+     }
+    ],
+    "off_page": [],
+    "coverage": {
+     "pages_total": 1,
+     "pages_scanned": 1,
+     "pages_failed": [],
+     "survivor_pages_failed": [],
+     "prior_revisions_scanned": false,
+     "prior_revisions_failed": [],
+     "metadata_scanned": true,
+     "acroform_scanned": false,
+     "attachments_scanned": false,
+     "form_xobjects_scanned": 0,
+     "annotation_appearances_scanned": 0,
+     "embedded_streams_failed": 0,
+     "acroform_tree_incomplete": false,
+     "xmp_stream_unread": false,
+     "attachment_content_unread": false,
+     "attachment_tree_unread": false,
+     "not_scanned": [],
+     "raster_pages": [],
+     "raster_only_pages": [],
+     "scan_complete": true
+    },
+    "error": null
+   }
+  }
+ ],
+ "check": [
+  {
+   "pdf": "(redact_entities output of tests/fixtures/sample.pdf)",
+   "reply": {
+    "verdict": "safe_to_send",
+    "blocking": false,
+    "result": {
+     "state": "safe_to_send",
+     "blocking": false,
+     "summary": "Every mandatory check that applies to this file passed. 2 pages checked. 6 of the 15 checks did not apply to this file (below).",
+     "pagesTotal": 2,
+     "pagesRead": 2,
+     "checked": [
+      {
+       "text": "No text found under any black or white box (2 pages)"
+      },
+      {
+       "text": "No hidden layers, embedded files or comments"
+      },
+      {
+       "text": "Single version: no earlier saves recoverable"
+      },
+      {
+       "text": "Page text readable on all 2 pages (no scanned pages)"
+      },
+      {
+       "text": "No scripts, automatic actions or page thumbnails"
+      },
+      {
+       "text": "Document properties and metadata read"
+      }
+     ],
+     "notChecked": [
+      {
+       "text": "Bookmarks, tooltips, labels and alternate text: none in this file"
+      },
+      {
+       "text": "Form fields: none in this file"
+      },
+      {
+       "text": "Removed-text search: only applies to files Omitly redacted"
+      },
+      {
+       "text": "Detection profile: none was requested for this file"
+      },
+      {
+       "text": "Searchable text on scanned pages: none in this file"
+      },
+      {
+       "text": "Text inside images is not read: this check does no OCR."
+      },
+      {
+       "text": "Pictures under a box (a box drawn over a scanned image) are not checked."
+      }
+     ],
+     "problems": [],
+     "review": [],
+     "information": [
+      {
+       "text": "This file carries an Omitly report (omitly-audit.json) sealed with key 9a:f9:33:48:ce:c6:a6:d8:cf:1d:c1:d5:e7:48:f0:61. The report records: Safe to Send. A seal shows the file is unchanged since it was sealed, not who sealed it, so check that key is the sender's before relying on the report."
+      }
+     ],
+     "decisions": [],
+     "reasons": [],
+     "checkedAt": "2026-11-16T23:48:12Z",
+     "omitlyVersion": "0.1.0",
+     "sha256": "581054744c7186ec1e82252a2eeb52c2c8057f24ba20170981868e6d2ec40550",
+     "canWrite": false,
+     "sizeBytes": 32581,
+     "producer": null,
+     "decisionChannel": "none"
+    },
+    "reason_code": null
+   }
+  },
+  {
+   "pdf": "tests/fixtures/sample.pdf",
+   "reply": {
+    "verdict": "safe_to_send",
+    "blocking": false,
+    "result": {
+     "state": "safe_to_send",
+     "blocking": false,
+     "summary": "Every mandatory check that applies to this file passed. 2 pages checked. 6 of the 15 checks did not apply to this file (below).",
+     "pagesTotal": 2,
+     "pagesRead": 2,
+     "checked": [
+      {
+       "text": "No text found under any black or white box (2 pages)"
+      },
+      {
+       "text": "No hidden layers, embedded files or comments"
+      },
+      {
+       "text": "Single version: no earlier saves recoverable"
+      },
+      {
+       "text": "Page text readable on all 2 pages (no scanned pages)"
+      },
+      {
+       "text": "No scripts, automatic actions or page thumbnails"
+      },
+      {
+       "text": "Document properties and metadata read"
+      }
+     ],
+     "notChecked": [
+      {
+       "text": "Bookmarks, tooltips, labels and alternate text: none in this file"
+      },
+      {
+       "text": "Form fields: none in this file"
+      },
+      {
+       "text": "Removed-text search: only applies to files Omitly redacted"
+      },
+      {
+       "text": "Detection profile: none was requested for this file"
+      },
+      {
+       "text": "Searchable text on scanned pages: none in this file"
+      },
+      {
+       "text": "Text inside images is not read: this check does no OCR."
+      },
+      {
+       "text": "Pictures under a box (a box drawn over a scanned image) are not checked."
+      }
+     ],
+     "problems": [],
+     "review": [],
+     "information": [
+      {
+       "text": "The file has document properties or metadata, such as an author or a title. A check does not remove them."
+      },
+      {
+       "text": "Sensitive-looking text is visible on pages 1 and 2 (3 values).",
+       "pages": [
+        1,
+        2
+       ]
+      }
+     ],
+     "decisions": [],
+     "reasons": [],
+     "checkedAt": "2026-11-16T23:48:12Z",
+     "omitlyVersion": "0.1.0",
+     "sha256": "5fa54f4cac879f9e2ce75c9b7438cf9cedc3a81c3fdabf9b89958a94a41818cf",
+     "canWrite": false,
+     "sizeBytes": 1634,
+     "producer": null,
+     "decisionChannel": "none"
+    },
+    "reason_code": null
+   }
+  },
+  {
+   "pdf": "tests/fixtures/clean-text.pdf",
+   "reply": {
+    "verdict": "safe_to_send",
+    "blocking": false,
+    "result": {
+     "state": "safe_to_send",
+     "blocking": false,
+     "summary": "Every mandatory check that applies to this file passed. 1 page checked. 6 of the 15 checks did not apply to this file (below).",
+     "pagesTotal": 1,
+     "pagesRead": 1,
+     "checked": [
+      {
+       "text": "No text found under any black or white box (1 page)"
+      },
+      {
+       "text": "No hidden layers, embedded files or comments"
+      },
+      {
+       "text": "Single version: no earlier saves recoverable"
+      },
+      {
+       "text": "Page text readable on the only page (no scanned pages)"
+      },
+      {
+       "text": "No scripts, automatic actions or page thumbnails"
+      },
+      {
+       "text": "Document properties and metadata read"
+      }
+     ],
+     "notChecked": [
+      {
+       "text": "Bookmarks, tooltips, labels and alternate text: none in this file"
+      },
+      {
+       "text": "Form fields: none in this file"
+      },
+      {
+       "text": "Removed-text search: only applies to files Omitly redacted"
+      },
+      {
+       "text": "Detection profile: none was requested for this file"
+      },
+      {
+       "text": "Searchable text on scanned pages: none in this file"
+      },
+      {
+       "text": "Text inside images is not read: this check does no OCR."
+      },
+      {
+       "text": "Pictures under a box (a box drawn over a scanned image) are not checked."
+      }
+     ],
+     "problems": [],
+     "review": [],
+     "information": [
+      {
+       "text": "The file has document properties or metadata, such as an author or a title. A check does not remove them."
+      }
+     ],
+     "decisions": [],
+     "reasons": [],
+     "checkedAt": "2026-11-16T23:48:12Z",
+     "omitlyVersion": "0.1.0",
+     "sha256": "2d57a519f7c1b7fa9488838927b13b8a20a84e6f6b89847ca82d80024911c93f",
+     "canWrite": false,
+     "sizeBytes": 1587,
+     "producer": null,
+     "decisionChannel": "none"
+    },
+    "reason_code": null
+   }
+  },
+  {
+   "pdf": "tests/fixtures/covered-text.pdf",
+   "reply": {
+    "verdict": "needs_review",
+    "blocking": true,
+    "result": {
+     "state": "needs_review",
+     "blocking": true,
+     "summary": "This file should not be sent. 1 check found content a reader can recover. 1 page checked.",
+     "pagesTotal": 1,
+     "pagesRead": 1,
+     "checked": [
+      {
+       "text": "No hidden layers, embedded files or comments"
+      },
+      {
+       "text": "Single version: no earlier saves recoverable"
+      },
+      {
+       "text": "Page text readable on the only page (no scanned pages)"
+      },
+      {
+       "text": "No scripts, automatic actions or page thumbnails"
+      },
+      {
+       "text": "Document properties and metadata read"
+      }
+     ],
+     "notChecked": [
+      {
+       "text": "Bookmarks, tooltips, labels and alternate text: none in this file"
+      },
+      {
+       "text": "Form fields: none in this file"
+      },
+      {
+       "text": "Removed-text search: only applies to files Omitly redacted"
+      },
+      {
+       "text": "Detection profile: none was requested for this file"
+      },
+      {
+       "text": "Searchable text on scanned pages: none in this file"
+      },
+      {
+       "text": "Text inside images is not read: this check does no OCR."
+      },
+      {
+       "text": "Pictures under a box (a box drawn over a scanned image) are not checked."
+      }
+     ],
+     "problems": [
+      {
+       "text": "Text is still in the file under a painted box on page 1. Anyone can copy it out.",
+       "pages": [
+        1
+       ]
+      }
+     ],
+     "review": [],
+     "information": [],
+     "decisions": [],
+     "reasons": [],
+     "checkedAt": "2026-11-16T23:48:12Z",
+     "omitlyVersion": "0.1.0",
+     "sha256": "70b7096a96efb0a0e6724f95ab71a125b6837ee3b7a5dba04e609b3e056c74d7",
+     "canWrite": false,
+     "sizeBytes": 630,
+     "producer": null,
+     "decisionChannel": "none"
+    },
+    "reason_code": null
+   }
+  },
+  {
+   "pdf": "tests/fixtures/invisible-text.pdf",
+   "reply": {
+    "verdict": "needs_review",
+    "blocking": false,
+    "result": {
+     "state": "needs_review",
+     "blocking": false,
+     "summary": "No problems found, but 1 item needs a person to look at it before this file is sent. 1 page checked.",
+     "pagesTotal": 1,
+     "pagesRead": 1,
+     "checked": [
+      {
+       "text": "No text found under any black or white box (1 page)"
+      },
+      {
+       "text": "No hidden layers, embedded files or comments"
+      },
+      {
+       "text": "Single version: no earlier saves recoverable"
+      },
+      {
+       "text": "No scripts, automatic actions or page thumbnails"
+      },
+      {
+       "text": "Document properties and metadata read"
+      }
+     ],
+     "notChecked": [
+      {
+       "text": "Bookmarks, tooltips, labels and alternate text: none in this file"
+      },
+      {
+       "text": "Form fields: none in this file"
+      },
+      {
+       "text": "Removed-text search: only applies to files Omitly redacted"
+      },
+      {
+       "text": "Detection profile: none was requested for this file"
+      },
+      {
+       "text": "Searchable text on scanned pages: none in this file"
+      },
+      {
+       "text": "Text inside images is not read: this check does no OCR."
+      },
+      {
+       "text": "Pictures under a box (a box drawn over a scanned image) are not checked."
+      }
+     ],
+     "problems": [],
+     "review": [
+      {
+       "text": "The file has text on page 1 that is not shown and is not part of a scanned image. Anyone can copy it out. Select all the text to read it, or remove it, before sending.",
+       "pages": [
+        1
+       ]
+      }
+     ],
+     "information": [],
+     "decisions": [],
+     "reasons": [],
+     "checkedAt": "2026-11-16T23:48:12Z",
+     "omitlyVersion": "0.1.0",
+     "sha256": "8db7cced0b4e767abfca868ade1823dc824d7774f7afe6e78be566f9d3e77be3",
+     "canWrite": false,
+     "sizeBytes": 661,
+     "producer": null,
+     "decisionChannel": "none"
+    },
+    "reason_code": null
+   }
+  },
+  {
+   "pdf": "tests/fixtures/encrypted-aes256-survivor.pdf",
+   "reply": {
+    "verdict": "cannot_verify",
+    "blocking": false,
+    "result": {
+     "state": "cannot_verify",
+     "blocking": false,
+     "summary": "Omitly could not complete every check, so it cannot say whether this file is safe to send.",
+     "pagesTotal": 0,
+     "pagesRead": 0,
+     "checked": [],
+     "notChecked": [
+      {
+       "text": "Text inside images is not read: this check does no OCR."
+      },
+      {
+       "text": "Pictures under a box (a box drawn over a scanned image) are not checked."
+      }
+     ],
+     "problems": [],
+     "review": [],
+     "information": [],
+     "decisions": [],
+     "reasons": [
+      {
+       "text": "The file is password-protected (encrypted), so its contents could not be read. Remove the password (save a copy without one) and check that copy."
+      }
+     ],
+     "checkedAt": "2026-11-16T23:48:12Z",
+     "omitlyVersion": "0.1.0",
+     "sha256": "893d7a20605f14c8033a4fe0e365ce2ed874e5e44c7883be74cc8742b03c5973",
+     "canWrite": false,
+     "sizeBytes": 1766,
+     "producer": null
+    },
+    "report": null,
+    "reason_code": null
+   }
+  },
+  {
+   "pdf": "tests/fixtures/au-corpus/05-scanned-raster.pdf",
+   "reply": {
+    "verdict": "needs_review",
+    "blocking": false,
+    "result": {
+     "state": "needs_review",
+     "blocking": false,
+     "summary": "No problems found, but 1 item needs a person to look at it before this file is sent. 1 page checked.",
+     "pagesTotal": 1,
+     "pagesRead": 1,
+     "checked": [
+      {
+       "text": "No text found under any black or white box (1 page)"
+      },
+      {
+       "text": "No hidden layers, embedded files or comments"
+      },
+      {
+       "text": "Single version: no earlier saves recoverable"
+      },
+      {
+       "text": "No scripts, automatic actions or page thumbnails"
+      },
+      {
+       "text": "Document properties and metadata read"
+      }
+     ],
+     "notChecked": [
+      {
+       "text": "Bookmarks, tooltips, labels and alternate text: none in this file"
+      },
+      {
+       "text": "Form fields: none in this file"
+      },
+      {
+       "text": "Removed-text search: only applies to files Omitly redacted"
+      },
+      {
+       "text": "Detection profile: none was requested for this file"
+      },
+      {
+       "text": "Searchable text on scanned pages: none in this file"
+      },
+      {
+       "text": "Text inside images is not read: this check does no OCR."
+      },
+      {
+       "text": "Pictures under a box (a box drawn over a scanned image) are not checked."
+      }
+     ],
+     "problems": [],
+     "review": [
+      {
+       "text": "Page content is an image only on page 1, so any text there was not read.",
+       "pages": [
+        1
+       ]
+      }
+     ],
+     "information": [
+      {
+       "text": "The file has document properties or metadata, such as an author or a title. A check does not remove them."
+      }
+     ],
+     "decisions": [],
+     "reasons": [],
+     "checkedAt": "2026-11-16T23:48:12Z",
+     "omitlyVersion": "0.1.0",
+     "sha256": "206cca71d6d9a967c38ce9279bd7c838720a3b2c7b1fc6cd760ac656b452fb42",
+     "canWrite": false,
+     "sizeBytes": 7728,
+     "producer": null,
+     "decisionChannel": "none"
+    },
+    "reason_code": null
+   }
+  },
+  {
+   "pdf": "tests/fixtures/au-corpus/07-incremental-update-prior-revision.pdf",
+   "reply": {
+    "verdict": "needs_review",
+    "blocking": false,
+    "result": {
+     "state": "needs_review",
+     "blocking": false,
+     "summary": "No problems found, but 1 item needs a person to look at it before this file is sent. 1 page checked.",
+     "pagesTotal": 1,
+     "pagesRead": 1,
+     "checked": [
+      {
+       "text": "No text found under any black or white box (1 page)"
+      },
+      {
+       "text": "No hidden layers, embedded files or comments"
+      },
+      {
+       "text": "Page text readable on the only page (no scanned pages)"
+      },
+      {
+       "text": "No scripts, automatic actions or page thumbnails"
+      },
+      {
+       "text": "Document properties and metadata read"
+      }
+     ],
+     "notChecked": [
+      {
+       "text": "Bookmarks, tooltips, labels and alternate text: none in this file"
+      },
+      {
+       "text": "Form fields: none in this file"
+      },
+      {
+       "text": "Removed-text search: only applies to files Omitly redacted"
+      },
+      {
+       "text": "Detection profile: none was requested for this file"
+      },
+      {
+       "text": "Searchable text on scanned pages: none in this file"
+      },
+      {
+       "text": "Text inside images is not read: this check does no OCR."
+      },
+      {
+       "text": "Pictures under a box (a box drawn over a scanned image) are not checked."
+      }
+     ],
+     "problems": [],
+     "review": [
+      {
+       "text": "The file keeps an earlier version of itself, which a recipient can recover."
+      }
+     ],
+     "information": [
+      {
+       "text": "The file has document properties or metadata, such as an author or a title. A check does not remove them."
+      }
+     ],
+     "decisions": [],
+     "reasons": [],
+     "checkedAt": "2026-11-16T23:48:12Z",
+     "omitlyVersion": "0.1.0",
+     "sha256": "1d9b3f0ea205ea3d394a915eaf542370d52c259677acc10fd80b300b514595be",
+     "canWrite": false,
+     "sizeBytes": 2017,
+     "producer": null,
+     "decisionChannel": "none"
+    },
+    "reason_code": null
+   }
+  },
+  {
+   "pdf": "tests/fixtures/au-corpus/08-acroform-fields.pdf",
+   "reply": {
+    "verdict": "needs_review",
+    "blocking": false,
+    "result": {
+     "state": "needs_review",
+     "blocking": false,
+     "summary": "No problems found, but 1 item needs a person to look at it before this file is sent. 1 page checked.",
+     "pagesTotal": 1,
+     "pagesRead": 1,
+     "checked": [
+      {
+       "text": "No text found under any black or white box (1 page)"
+      },
+      {
+       "text": "No hidden layers, embedded files or comments"
+      },
+      {
+       "text": "Page text readable on the only page (no scanned pages)"
+      },
+      {
+       "text": "No scripts, automatic actions or page thumbnails"
+      },
+      {
+       "text": "No bookmarks, tooltips, labels or alternate text need review"
+      },
+      {
+       "text": "Document properties and metadata read"
+      },
+      {
+       "text": "No form field holds a value that is not shown on a page"
+      }
+     ],
+     "notChecked": [
+      {
+       "text": "Removed-text search: only applies to files Omitly redacted"
+      },
+      {
+       "text": "Detection profile: none was requested for this file"
+      },
+      {
+       "text": "Searchable text on scanned pages: none in this file"
+      },
+      {
+       "text": "Text inside images is not read: this check does no OCR."
+      },
+      {
+       "text": "Pictures under a box (a box drawn over a scanned image) are not checked."
+      }
+     ],
+     "problems": [],
+     "review": [
+      {
+       "text": "The file stores text that nothing in it uses or shows, usually left over from an earlier save, which a recipient can recover."
+      }
+     ],
+     "information": [
+      {
+       "text": "The file has document properties or metadata, such as an author or a title. A check does not remove them."
+      }
+     ],
+     "decisions": [],
+     "reasons": [],
+     "checkedAt": "2026-11-16T23:48:13Z",
+     "omitlyVersion": "0.1.0",
+     "sha256": "9a87efdb791701b0dd53f4d54ce512ba5eb54c75c68fb76ea4d78c04a6bc1843",
+     "canWrite": false,
+     "sizeBytes": 9238,
+     "producer": null,
+     "decisionChannel": "none"
+    },
+    "reason_code": null
+   }
+  },
+  {
+   "pdf": "scripts/fixtures/leakcheck/form-xobject-under-box.pdf",
+   "reply": {
+    "verdict": "needs_review",
+    "blocking": true,
+    "result": {
+     "state": "needs_review",
+     "blocking": true,
+     "summary": "This file should not be sent. 1 check found content a reader can recover. 1 page checked.",
+     "pagesTotal": 1,
+     "pagesRead": 1,
+     "checked": [
+      {
+       "text": "No hidden layers, embedded files or comments"
+      },
+      {
+       "text": "Single version: no earlier saves recoverable"
+      },
+      {
+       "text": "Page text readable on the only page (no scanned pages)"
+      },
+      {
+       "text": "No scripts, automatic actions or page thumbnails"
+      },
+      {
+       "text": "Document properties and metadata read"
+      }
+     ],
+     "notChecked": [
+      {
+       "text": "Bookmarks, tooltips, labels and alternate text: none in this file"
+      },
+      {
+       "text": "Form fields: none in this file"
+      },
+      {
+       "text": "Removed-text search: only applies to files Omitly redacted"
+      },
+      {
+       "text": "Detection profile: none was requested for this file"
+      },
+      {
+       "text": "Searchable text on scanned pages: none in this file"
+      },
+      {
+       "text": "Text inside images is not read: this check does no OCR."
+      },
+      {
+       "text": "Pictures under a box (a box drawn over a scanned image) are not checked."
+      }
+     ],
+     "problems": [
+      {
+       "text": "Text is still in the file under a painted box on page 1. Anyone can copy it out.",
+       "pages": [
+        1
+       ]
+      }
+     ],
+     "review": [],
+     "information": [],
+     "decisions": [],
+     "reasons": [],
+     "checkedAt": "2026-11-16T23:48:13Z",
+     "omitlyVersion": "0.1.0",
+     "sha256": "0d10068c9d2c433a159c22d3e53df0348b879f86f593742de4c1153437d8ef88",
+     "canWrite": false,
+     "sizeBytes": 892,
+     "producer": null,
+     "decisionChannel": "none"
+    },
+    "reason_code": null
+   }
+  },
+  {
+   "pdf": "(generated: tests/fixtures/covered-text.pdf plus a 66 MiB unreferenced stream)",
+   "reply": {
+    "verdict": "cannot_verify",
+    "blocking": false,
+    "result": {
+     "state": "cannot_verify",
+     "blocking": false,
+     "summary": "Omitly could not complete every check, so it cannot say whether this file is safe to send.",
+     "pagesTotal": 0,
+     "pagesRead": 0,
+     "checked": [],
+     "notChecked": [
+      {
+       "text": "Text inside images is not read: this check does no OCR."
+      },
+      {
+       "text": "Pictures under a box (a box drawn over a scanned image) are not checked."
+      }
+     ],
+     "problems": [],
+     "review": [],
+     "information": [],
+     "decisions": [],
+     "reasons": [
+      {
+       "text": "The file is larger than this checker accepts, so it was not read."
+      }
+     ],
+     "checkedAt": "2026-11-16T23:48:13Z",
+     "omitlyVersion": "0.1.0",
+     "sha256": "",
+     "canWrite": false,
+     "sizeBytes": 69207248,
+     "producer": null
+    },
+    "report": null,
+    "reason_code": "input_too_large"
+   }
+  }
+ ],
+ "locate": [
+  {
+   "pdf": "tests/fixtures/sample.pdf",
+   "needles": [
+    "Statement"
+   ],
+   "reply": {
+    "ok": true,
+    "count": 0,
+    "clean": true,
+    "total_findings": 0,
+    "by_kind": {},
+    "leaks": [],
+    "survivors": [],
+    "off_page": [],
+    "coverage": null,
+    "error": null
+   }
+  }
+ ]
+}

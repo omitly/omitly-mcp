@@ -43,7 +43,6 @@ const ENV_KEYS = [
   "OMITLY_PDF_BIN",
   "OMITLY_ENGINE_DIR",
   "OMITLY_STATE_DIR",
-  "OMITLY_FREE_CAP",
 ] as const;
 
 let importCounter = 0;
@@ -105,6 +104,29 @@ function blackBoxOverText(): Buffer {
   return Buffer.from(pdf, "latin1");
 }
 
+/** One page of text with nothing sensitive-looking on it. */
+function plainPdf(): Buffer {
+  const content = "BT /F1 12 Tf 100 680 Td (Quarterly summary) Tj ET\n";
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+    `<< /Length ${content.length} >>\nstream\n${content}endstream`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+  ];
+  let pdf = "%PDF-1.5\n";
+  const offsets: number[] = [];
+  objects.forEach((body, i) => {
+    offsets.push(pdf.length);
+    pdf += `${i + 1} 0 obj\n${body}\nendobj\n`;
+  });
+  const xref = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (const o of offsets) pdf += `${String(o).padStart(10, "0")} 00000 n \n`;
+  pdf += `trailer\n<< /Root 1 0 R /Size ${objects.length + 1} >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(pdf, "latin1");
+}
+
 const FIXTURE_DIR = [path.join(HERE, "..", "tests", "fixtures"), path.join(WORKSPACE, "tests", "fixtures")].find(
   (p) => existsSync(path.join(p, "sample.pdf")),
 );
@@ -114,8 +136,12 @@ test("check_redaction's verdict is identical from the native engine and the wasm
   assert.ok(FIXTURE_DIR, "sample.pdf fixture not found");
   const root = realpathSync(mkdtempSync(path.join(tmpdir(), "omitly-verdict-parity-")));
   const docs: [string, Buffer, string, boolean][] = [
-    ["sample.pdf", readFileSync(path.join(FIXTURE_DIR, "sample.pdf")), "safe_to_send", false],
-    ["sample.redacted.pdf", readFileSync(path.join(FIXTURE_DIR, "sample.redacted.pdf")), "safe_to_send", false],
+    // omitly#1864: sample.pdf's identifiers are visible, so the engine's Safe to Send is held back to Needs Review.
+    ["sample.pdf", readFileSync(path.join(FIXTURE_DIR, "sample.pdf")), "needs_review", false],
+    // omitly#1864: this fixture's text layer still lists three identifiers, so it too is held back.
+    ["sample.redacted.pdf", readFileSync(path.join(FIXTURE_DIR, "sample.redacted.pdf")), "needs_review", false],
+    // A file the scan finds nothing in keeps the engine's Safe to Send on both paths.
+    ["plain.pdf", plainPdf(), "safe_to_send", false],
     ["black-box.pdf", blackBoxOverText(), "needs_review", true],
     // No `cannot_verify` row: a file the v1 scan cannot parse fails the whole
     // tool before a verdict is taken (existing behaviour). The CLI and wasm
@@ -126,7 +152,7 @@ test("check_redaction's verdict is identical from the native engine and the wasm
     writeFileSync(doc, bytes);
     const native = await checkVia({ OMITLY_ALLOWED_DIR: root, OMITLY_REDACT_BIN: ENGINE! }, doc);
     const wasm = await checkVia(
-      { OMITLY_ALLOWED_DIR: root, OMITLY_STATE_DIR: path.join(root, "state"), OMITLY_FREE_CAP: "1000" },
+      { OMITLY_ALLOWED_DIR: root, OMITLY_STATE_DIR: path.join(root, "state") },
       doc,
     );
     assert.deepEqual(withoutTime(native), withoutTime(wasm), `${name}: native and wasm verdicts differ`);

@@ -1,0 +1,41 @@
+{
+  "client": {
+    "name": "Claude Desktop",
+    "version": "1.4.2"
+  },
+  "created_at": "2026-11-01T00:00:00Z",
+  "decided_revision": "cd6926f220a918aff509b393a2a84c7d9e78a92d6c9f29ac2d9ed6154b69684f",
+  "id": "bbbbbbbbbbbbbbbbbbbbbbbb",
+  "output": "/out/file.pdf",
+  "outputPath": "/docs/out.pdf",
+  "pdfPath": "/docs/in.pdf",
+  "pdfSha256": "1111111111111111111111111111111111111111111111111111111111111111",
+  "regions": [
+    {
+      "height": 4.0,
+      "page": 0,
+      "reason": "name",
+      "width": 3.0,
+      "x": 1.0,
+      "y": 2.0
+    },
+    {
+      "height": 8.0,
+      "page": 1,
+      "width": 7.0,
+      "x": 5.0,
+      "y": 6.0
+    },
+    {
+      "height": 3.0,
+      "page": 2,
+      "width": 2.0,
+      "x": 9.0,
+      "y": 1.0
+    }
+  ],
+  "resolved_at": "2026-11-02T00:00:00Z",
+  "status": "applied",
+  "tool": "redact_pdf",
+  "verdict": "pass"
+}

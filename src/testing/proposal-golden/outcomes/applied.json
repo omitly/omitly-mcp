@@ -1,0 +1,13 @@
+{
+  "createdAt": "2026-11-01T00:00:00Z",
+  "decidedAt": "2026-11-02T00:00:00Z",
+  "decidedRevision": "cd6926f220a918aff509b393a2a84c7d9e78a92d6c9f29ac2d9ed6154b69684f",
+  "decision": "applied",
+  "id": "bbbbbbbbbbbbbbbbbbbbbbbb",
+  "mailboxRevision": "<sha256 of the status file>",
+  "note": null,
+  "output": "/out/file.pdf",
+  "tool": "redact_pdf",
+  "v": 1,
+  "verdict": "pass"
+}

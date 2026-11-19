@@ -1,0 +1,14 @@
+{
+  "createdAt": null,
+  "decidedAt": "2026-11-01T12:00:00Z",
+  "decidedRevision": null,
+  "decision": "legacy",
+  "id": "aaaaaaaaaaaaaaaaaaaaaaaa",
+  "legacyStatus": "applied",
+  "mailboxRevision": null,
+  "note": "applied by the old app",
+  "output": "/out/yesterday.pdf",
+  "tool": null,
+  "v": 1,
+  "verdict": "safe_to_send"
+}

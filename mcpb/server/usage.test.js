@@ -1,109 +1,48 @@
 /**
- * Unit tests for the MCPB bundle's CJS metering mirror (omitly#226) — run by
- * `npm --prefix mcpb test` (node --test server/*.test.js), same as
- * paths.test.js. Keep behaviour identical to ../../src/usage.test.ts: the two
- * servers share one state file and must agree about it.
+ * Tests for the MCPB bundle's scan notices (omitly#1859 removed the monthly cap and the owner
+ * reworded the disclaimer) — run by `npm --prefix mcpb test` (node --test server/*.test.js). The
+ * texts must match ../../src/usage.ts, and the bundle must hold no counter, cap or state file.
  */
 "use strict";
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { mkdtempSync, readFileSync, writeFileSync, mkdirSync, statSync } = require("node:fs");
-const os = require("node:os");
+const { readFileSync } = require("node:fs");
 const path = require("node:path");
 
-const {
-  DEFAULT_FREE_CAP,
-  freeCap,
-  monthKey,
-  recordFreeCheck,
-  freeCapRefusal,
-  evaluationBanner,
-  _resetMemCounts,
-} = require("./usage.js");
+const usage = require("./usage.js");
 
-function freshStateDir() {
-  const dir = mkdtempSync(path.join(os.tmpdir(), "omitly-mcpb-usage-test-"));
-  process.env.OMITLY_STATE_DIR = dir;
-  _resetMemCounts();
-  return dir;
-}
+test("the module exports only the two notices; the cap and counter are gone", () => {
+  assert.deepEqual(Object.keys(usage).sort(), ["CHECK_NOTICE", "FIND_NOTICE"]);
+});
 
-test("counts up and refuses past the cap with the structured shape", () => {
-  freshStateDir();
-  process.env.OMITLY_FREE_CAP = "2";
+test("the notices are plain, say nothing is removed, and carry no evaluation or free-tier wording or count", () => {
+  assert.equal(usage.FIND_NOTICE, "This scan lists likely sensitive items. It does not remove anything and is not a removal certificate.");
+  assert.equal(usage.CHECK_NOTICE, "This check finds likely leaks. It does not remove anything and is not a removal certificate.");
+  for (const n of Object.values(usage)) assert.doesNotMatch(n, /evaluation|free tier|\d+\/\d+|this month|counted/i);
+});
+
+test("the texts are identical to the full server's (src/usage.ts)", () => {
+  // From mcpb/server/ the TS source is at ../../src/usage.ts in the monorepo; the published
+  // mirror has no src/, so compare only when it is present.
+  let ts;
   try {
-    assert.equal(recordFreeCheck().capped, false);
-    assert.equal(recordFreeCheck().capped, false);
-    const third = recordFreeCheck();
-    assert.equal(third.capped, true);
-    const refusal = freeCapRefusal("find_sensitive_regions", third);
-    assert.equal(refusal.blocked, true);
-    assert.equal(refusal.reason, "free-cap");
-    assert.match(refusal.message, /counted locally/);
-  } finally {
-    delete process.env.OMITLY_FREE_CAP;
+    ts = readFileSync(path.join(__dirname, "..", "..", "src", "usage.ts"), "utf8");
+  } catch {
+    return;
+  }
+  for (const name of ["FIND_NOTICE", "CHECK_NOTICE"]) {
+    const m = new RegExp(name + " =\\s*((?:\"[^\"]*\"\\s*\\+?\\s*)+);").exec(ts);
+    assert.ok(m, name + " found in usage.ts");
+    const joined = [...m[1].matchAll(/"([^"]*)"/g)].map((x) => x[1]).join("");
+    assert.equal(joined, usage[name]);
   }
 });
 
-test("persists to usage.json (0600) and survives an in-memory reset", (t) => {
-  const dir = freshStateDir();
-  process.env.OMITLY_FREE_CAP = "5";
-  try {
-    recordFreeCheck();
-    _resetMemCounts(); // simulated restart
-    const second = recordFreeCheck();
-    assert.equal(second.used, 2);
-    const file = path.join(dir, "usage.json");
-    const state = JSON.parse(readFileSync(file, "utf8"));
-    assert.equal(state.check_calls[monthKey()], 2);
-    assert.equal(state.licensed, false);
-    if (process.platform !== "win32") {
-      assert.equal(statSync(file).mode & 0o777, 0o600);
-    }
-  } finally {
-    delete process.env.OMITLY_FREE_CAP;
-  }
-});
-
-test("month rollover resets; corrupt file degrades to fresh", () => {
-  const dir = freshStateDir();
-  process.env.OMITLY_FREE_CAP = "1";
-  try {
-    const july = new Date(Date.UTC(2026, 6, 1));
-    const august = new Date(Date.UTC(2026, 7, 1));
-    recordFreeCheck(july);
-    assert.equal(recordFreeCheck(july).capped, true);
-    assert.equal(recordFreeCheck(august).capped, false, "new month starts fresh");
-
-    writeFileSync(path.join(dir, "usage.json"), "garbage{{{");
-    _resetMemCounts();
-    assert.equal(recordFreeCheck(august).used, 1, "corrupt state never crashes, restarts fresh");
-  } finally {
-    delete process.env.OMITLY_FREE_CAP;
-  }
-});
-
-test("licensed=true skips the cap; default cap is 10", () => {
-  const dir = freshStateDir();
-  process.env.OMITLY_FREE_CAP = "1";
-  try {
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(
-      path.join(dir, "usage.json"),
-      JSON.stringify({ check_calls: { [monthKey()]: 999 }, install_id: "x", licensed: true }),
-    );
-    assert.equal(recordFreeCheck().capped, false);
-  } finally {
-    delete process.env.OMITLY_FREE_CAP;
-  }
-  assert.equal(DEFAULT_FREE_CAP, 10);
-  delete process.env.OMITLY_FREE_CAP;
-  assert.equal(freeCap(), 10);
-});
-
-test("banner is honest about evaluation status and count", () => {
-  const banner = evaluationBanner({ capped: false, used: 2, cap: 10, month: "2026-08" });
-  assert.match(banner, /EVALUATION/);
-  assert.match(banner, /2\/10/);
+test("the bundle server has no cap, no counter and no purchase link in a scan result", () => {
+  const src = readFileSync(path.join(__dirname, "index.js"), "utf8");
+  assert.doesNotMatch(src, /free-cap|recordFreeCheck|freeCapRefusal|usage\.json|10 attempts|EVALUATION/);
+  // Links in comments are fine; none may sit in a string a tool returns.
+  const code = src.split("\n").filter((l) => !/^\s*(\/\/|\/\*|\*)/.test(l)).join("\n");
+  assert.doesNotMatch(code, /omitly\.app/);
 });

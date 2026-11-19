@@ -3,10 +3,11 @@
  * network claim, and the README tool table.
  *
  * 2C/3B are proved BY BEHAVIOUR, not by spying on internals (the queue function is a closure):
- * with a live desktop heartbeat that has accept-in-app ON, OMITLY_FREE_CAP=1 and this month's
- * one check already used, each writer still produces its file, no proposal appears, and
- * `check_calls` is unchanged. A positive control first shows the same setup DOES queue a
- * proposal for a redaction and DOES refuse a second check, so a vacuous setup cannot pass.
+ * with a live desktop heartbeat that has accept-in-app ON, each writer still produces its file
+ * and no proposal appears. Since omitly#1859 there is no usage counter at all, so 3B is now
+ * "nothing is counted": no `usage.json` exists before or after. A positive control first shows
+ * the same setup DOES queue a proposal for a redaction and that a free scan runs, so a vacuous
+ * setup cannot pass.
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -17,10 +18,9 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import { makeDoc, pageMarkers, put, tempRoot, textOf } from "./edit-fixtures.test.js";
-import { monthKey } from "./usage.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const ENV = ["OMITLY_ALLOWED_DIR", "OMITLY_REDACT_BIN", "OMITLY_PDF_BIN", "OMITLY_ENGINE_DIR", "OMITLY_STATE_DIR", "OMITLY_FREE_CAP"] as const;
+const ENV = ["OMITLY_ALLOWED_DIR", "OMITLY_REDACT_BIN", "OMITLY_PDF_BIN", "OMITLY_ENGINE_DIR", "OMITLY_STATE_DIR"] as const;
 let n = 0;
 
 async function withFullServer<T>(env: Record<string, string>, fn: (call: (name: string, args: Record<string, unknown>) => Promise<any>, client: Client) => Promise<T>): Promise<T> {
@@ -42,34 +42,32 @@ async function withFullServer<T>(env: Record<string, string>, fn: (call: (name: 
 
 const proposals = (state: string) => (existsSync(path.join(state, "proposals")) ? readdirSync(path.join(state, "proposals")) : []);
 
-test("2C/3B: with the desktop live (accept-in-app on) and the free cap used up, every page tool still writes its file, queues nothing and counts nothing", async () => {
+test("2C/3B: with the desktop live (accept-in-app on), every page tool still writes its file, queues nothing and counts nothing", async () => {
   const root = tempRoot();
   const state = path.join(root, "state");
   mkdirSync(state);
-  const seeded = { check_calls: { [monthKey()]: 1 }, install_id: "11111111-1111-4111-8111-111111111111", licensed: false };
   const usageFile = path.join(state, "usage.json");
-  writeFileSync(usageFile, JSON.stringify(seeded));
   writeFileSync(path.join(state, "desktop.json"), JSON.stringify({ pid: 4242, version: "5.4.0", accept_in_app: true, updated_at: new Date().toISOString() }));
   put(root, "a.pdf", await makeDoc("A", 4));
   put(root, "b.pdf", await makeDoc("B", 2));
-  const usageBefore = readFileSync(usageFile, "utf8");
 
-  await withFullServer({ OMITLY_ALLOWED_DIR: root, OMITLY_STATE_DIR: state, OMITLY_FREE_CAP: "1" }, async (call) => {
-    // CONTROL 1: this setup refuses a second free check ...
-    const capped = await call("check_redaction", { pdfPath: "a.pdf" });
-    assert.equal(capped.isError, true);
-    assert.equal(JSON.parse(textOf(capped)).reason, "free-cap", "the cap is exhausted, so the control is live");
-    // CONTROL 2: ... and a redaction proposal IS queued for the person in the desktop app.
+  await withFullServer({ OMITLY_ALLOWED_DIR: root, OMITLY_STATE_DIR: state }, async (call) => {
+    // CONTROL 1: a free scan runs on this setup and, since omitly#1859, counts nothing.
+    const scan = await call("check_redaction", { pdfPath: "a.pdf" });
+    assert.ok(!/free-cap/.test(textOf(scan)), "no cap refusal exists");
+    assert.ok(!existsSync(usageFile), "a free scan writes no usage counter");
+    // CONTROL 2: a redaction proposal IS queued for the person in the desktop app.
     assert.deepEqual(proposals(state), []);
+    // omitly#1890: coordinates are proposed against a scan of the document, by its analysisId.
+    const found: any = await call("find_sensitive_regions", { pdfPath: "a.pdf" });
     const prop = await call("propose_redactions", {
       pdfPath: "a.pdf",
       outputPath: "a-redacted.pdf",
       regions: [{ page: 0, x: 1, y: 1, width: 5, height: 5 }],
+      analysisId: found.structuredContent?.analysisId,
     });
     assert.ok(!prop.isError, textOf(prop));
     assert.equal(proposals(state).length, 1, "the desktop channel is live: a redaction proposal was queued");
-    const usageAfterControls = readFileSync(usageFile, "utf8");
-    assert.equal(JSON.parse(usageAfterControls).check_calls[monthKey()] >= 1, true);
 
     // THE TEST: the five tools.
     const results = [
@@ -82,13 +80,12 @@ test("2C/3B: with the desktop live (accept-in-app on) and the free cap used up, 
     for (const r of results) assert.ok(!r.isError, textOf(r));
     for (const f of ["x.pdf", "ed.pdf", "mg.pdf", "sp-p1-2.pdf", "sp-p3-4.pdf"]) assert.ok(existsSync(path.join(root, f)), `${f} was written directly`);
     assert.equal(proposals(state).length, 1, "no new proposal: new-file edits run automatically (2C)");
-    assert.equal(readFileSync(usageFile, "utf8"), usageAfterControls, "check_calls (usage.json) is byte-for-byte unchanged (3B)");
+    assert.ok(!existsSync(usageFile), "nothing is counted (3B): still no usage.json");
     for (const r of results) {
       const all = JSON.stringify(r);
       assert.ok(!/EVALUATION|free-cap|licen[cs]e/i.test(all), "no EVALUATION banner, cap or licence text");
     }
   });
-  assert.notEqual(usageBefore, "", "seeded");
 });
 
 // ---------------------------------------------------------------------------
@@ -172,7 +169,7 @@ test("check-to-edit: a 0-based page from find_sensitive_regions, plus 1, extract
     p.drawText(i === 1 ? "Social security number 123-45-6789 for John" : `Nothing sensitive on page ${i + 1}`, { x: 20, y: 150, size: 12, font });
   }
   put(root, "doc.pdf", await doc.save());
-  await withFullServer({ OMITLY_ALLOWED_DIR: root, OMITLY_STATE_DIR: state, OMITLY_FREE_CAP: "1000" }, async (call) => {
+  await withFullServer({ OMITLY_ALLOWED_DIR: root, OMITLY_STATE_DIR: state }, async (call) => {
     const found = await call("find_sensitive_regions", { pdfPath: "doc.pdf" });
     assert.ok(!found.isError, textOf(found));
     const regions = found.structuredContent.regions as { page: number; kind: string }[];

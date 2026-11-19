@@ -4,7 +4,7 @@ argument-hint: <path/to/file.pdf>
 ---
 
 The argument `$ARGUMENTS` is the path to a local PDF. If no path was given, ask for
-one and stop (a call on an empty path still uses one free check). Follow the hard
+one and stop. Follow the hard
 rules of the omitly-redaction skill.
 
 1. Call the Omitly server's `check_redaction` tool on that path (argument

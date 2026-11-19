@@ -4,9 +4,11 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { chmodSync, copyFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 
@@ -17,6 +19,8 @@ import {
   listProposals,
   readDesktopPresence,
   readProposal,
+  recordAnalysis,
+  sha256OfFile,
   writeClientHeartbeat,
 } from "./desktop.js";
 
@@ -26,7 +30,6 @@ const ENV_KEYS = [
   "OMITLY_PDF_BIN",
   "OMITLY_ENGINE_DIR",
   "OMITLY_STATE_DIR",
-  "OMITLY_FREE_CAP",
 ] as const;
 
 let counter = 0;
@@ -67,12 +70,14 @@ async function withServer<T>(
   stateDir: string,
   fn: (client: Client) => Promise<T>,
   clientInfo = { name: "Claude Desktop", version: "1.4.2" },
+  // omitly#1890 step 1: false = no native engine, so a scan is served by the real wasm detector.
+  withEngine = true,
 ): Promise<T> {
   for (const k of ENV_KEYS) delete process.env[k];
   process.env.OMITLY_ALLOWED_DIR = root;
   process.env.OMITLY_STATE_DIR = stateDir;
   const engine = recordingEngine(root);
-  process.env.OMITLY_REDACT_BIN = engine.bin;
+  if (withEngine) process.env.OMITLY_REDACT_BIN = engine.bin;
   counter += 1;
   const mod = (await import(`./index.js?desktop-variant=${counter}`)) as typeof import("./index.js");
   const server = mod.createServer();
@@ -87,6 +92,13 @@ async function withServer<T>(
     await client.close();
     await server.close();
   }
+}
+
+/** omitly#1890: what a scan of `file` registers (path + digest of its bytes), without running a scan:
+ *  these older tests are about the queue, not the scan. The scan side has its own tests in
+ *  analysis-binding.test.ts. */
+function analysisOf(file: string): string {
+  return recordAnalysis(file, sha256OfFile(file));
 }
 
 function textOf(res: any): string {
@@ -116,12 +128,15 @@ test("presence: missing, malformed and stale heartbeats all read as no desktop",
 test("enqueue writes a 0600 pending file in a 0700 dir and reads back by id only", () => {
   const dir = freshRoot();
   process.env.OMITLY_STATE_DIR = dir;
-  const p = enqueueProposal({
+  const pdf = path.join(dir, "in.pdf");
+  writeFileSync(pdf, "%PDF-1.4 stub");
+  const { proposal: p } = enqueueProposal({
     client: { name: "Cursor", version: "2.0" },
     tool: "redact_pdf",
-    pdfPath: "/tmp/in.pdf",
+    pdfPath: pdf,
     outputPath: "/tmp/out.pdf",
     regions: [{ page: 0, x: 1, y: 2, width: 3, height: 4, reason: "name" }],
+    analysisId: analysisOf(pdf),
   });
   assert.match(p.id, /^[0-9a-f]{24}$/);
   assert.equal(p.status, "pending");
@@ -164,6 +179,7 @@ test("redact_pdf becomes a proposal while the desktop is present with accept-in-
         pdfPath: path.join(root, "in.pdf"),
         outputPath: path.join(root, "out.pdf"),
         regions: [{ page: 0, x: 10, y: 10, width: 50, height: 12, reason: "PII: name" }],
+        analysisId: analysisOf(path.join(root, "in.pdf")),
       },
     });
     // The heartbeat file exists while the client is connected and is cleared on close.
@@ -212,6 +228,7 @@ test("propose_redactions always queues when the desktop is present, and says so 
     pdfPath: path.join(root, "in.pdf"),
     outputPath: path.join(root, "out.pdf"),
     regions: [{ page: 2, x: 1, y: 1, width: 5, height: 5 }],
+    analysisId: analysisOf(path.join(root, "in.pdf")),
   };
   // Absent desktop: an honest refusal, not a silent direct write.
   const absent = await withServer(root, stateDir, (client) => client.callTool({ name: "propose_redactions", arguments: args }));
@@ -229,7 +246,9 @@ test("get_proposal_status reflects what the desktop wrote back, and rejects a ba
   const stateDir = freshRoot("omitly-state-");
   writePresence(stateDir);
   process.env.OMITLY_STATE_DIR = stateDir;
-  const p = enqueueProposal({ client: { name: "t", version: "1" }, tool: "redact_pdf", pdfPath: "/a.pdf", outputPath: "/b.pdf", regions: [] });
+  const pdf = path.join(root, "a.pdf");
+  writeFileSync(pdf, "%PDF-1.4 stub");
+  const { proposal: p } = enqueueProposal({ client: { name: "t", version: "1" }, tool: "redact_pdf", pdfPath: pdf, outputPath: "/b.pdf", regions: [], analysisId: analysisOf(pdf) });
   // Simulate the desktop's decision.
   const file = path.join(stateDir, "proposals", `${p.id}.json`);
   writeFileSync(file, JSON.stringify({ ...p, status: "applied", output: "/b.pdf", verdict: "pass", resolved_at: new Date().toISOString() }));
@@ -238,13 +257,15 @@ test("get_proposal_status reflects what the desktop wrote back, and rejects a ba
   const sc: any = res.structuredContent;
   assert.equal(sc.status, "applied");
   assert.equal(sc.output, "/b.pdf");
-  assert.equal(sc.verdict, "pass");
-  assert.match(textOf(res), /Result: verified \(legacy report\)\./);
+  // Contract §3.7: what the desktop recorded is labelled, never a verdict of this server.
+  assert.equal(sc.recordedByDesktop, "pass");
+  assert.equal(sc.verdict, undefined);
+  assert.match(textOf(res), /The desktop app recorded: no failed region \(legacy report\)\./);
   // omitly#676: a v2 Needs Review outcome reads as Needs Review, never as
   // "verified" or a bare "fail".
   writeFileSync(file, JSON.stringify({ ...p, status: "applied", output: "/b.pdf", verdict: "needs_review", resolved_at: new Date().toISOString() }));
   const review = await withServer(root, stateDir, (client) => client.callTool({ name: "get_proposal_status", arguments: { proposalId: p.id } }));
-  assert.match(textOf(review), /Result: Needs Review\./);
+  assert.match(textOf(review), /The desktop app recorded: items to review\./);
   assert.doesNotMatch(textOf(review), /verified|verdict fail/);
   const bad = await withServer(root, stateDir, (client) => client.callTool({ name: "get_proposal_status", arguments: { proposalId: "../../etc/passwd" } }));
   assert.equal(bad.isError, true);
@@ -277,4 +298,99 @@ test("with no desktop heartbeat, redact_pdf takes today's direct path (engine in
     await client.close();
     await server.close();
   }
+});
+
+// ----------------------------------------- omitly#1890 build step 1: probe -----
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const FIXTURES = [path.join(HERE, "..", "tests", "fixtures"), path.join(HERE, "..", "..", "tests", "fixtures")].find((d) =>
+  existsSync(path.join(d, "sample.pdf")),
+);
+
+// Probe 8 (design 8.0, X4), converted at step 2. Scan document A with the real `find_sensitive_regions`
+// (the wasm detector, no engine), replace the file at that path with a different real PDF B, then
+// propose A's coordinates with A's `analysisId` through the real `propose_redactions` and through
+// `enqueueProposal` directly. Step 1 printed that the stored record carried no document identity at
+// all. It now asserts the fixed behaviour: a positive control (A's coordinates with A's id while the
+// file is still A) queues and records `pdfSha256` = sha256 of A's bytes; after the replacement both
+// routes are refused with the "document changed" text and no proposal file is written; with no id the
+// tool route is refused with the "scan this document" text. The OBSERVED prints are kept.
+test("probe_1890_enqueue_hashes_nothing_about_the_analysed_file", async () => {
+  assert.ok(FIXTURES, "the shared tests/fixtures directory must exist");
+  const NEEDS_SCAN = "Scan this document with find_sensitive_regions or locate_text and pass its analysisId before proposing boxes for it.";
+  const CHANGED = "The document changed since you looked at it; scan it again.";
+  const root = freshRoot();
+  const stateDir = freshRoot("omitly-state-");
+  const docA = path.join(root, "doc.pdf");
+  copyFileSync(path.join(FIXTURES, "sample.pdf"), docA); // A
+  const shaOfA = createHash("sha256").update(readFileSync(docA)).digest("hex");
+  writePresence(stateDir);
+  const tag = "probe_1890_enqueue_hashes_nothing_about_the_analysed_file";
+  const proposalFiles = () => (existsSync(path.join(stateDir, "proposals")) ? readdirSync(path.join(stateDir, "proposals")) : []);
+  const propose = (args: Record<string, unknown>) =>
+    withServer(
+      root,
+      stateDir,
+      (client) => client.callTool({ name: "propose_redactions", arguments: { pdfPath: docA, outputPath: path.join(root, "out.pdf"), ...args } }),
+      undefined,
+      false,
+    );
+
+  const scanned: any = await withServer(
+    root,
+    stateDir,
+    (client) => client.callTool({ name: "find_sensitive_regions", arguments: { pdfPath: docA } }),
+    undefined,
+    false,
+  );
+  assert.ok(!scanned.isError, `apparatus: the scan of A must succeed: ${textOf(scanned)}`);
+  const found: any[] = scanned.structuredContent.regions;
+  assert.ok(found.length > 0, "apparatus: A must yield at least one region to propose");
+  const analysisId: string = scanned.structuredContent.analysisId;
+  assert.match(analysisId, /^[0-9a-f]{32}$/, "the scan returns an analysisId");
+  const coords = found.slice(0, 1).map((r) => ({ page: r.page, x: r.x, y: r.y, width: r.width, height: r.height }));
+  console.log(`${tag}: OBSERVED: scanned A (${found.length} region(s)), analysisId ${analysisId}`);
+
+  // Positive control: while the file is still A, A's coordinates with A's id queue, bound to A's bytes.
+  const control: any = await propose({ regions: coords, analysisId });
+  assert.ok(!control.isError, `control: ${textOf(control)}`);
+  process.env.OMITLY_STATE_DIR = stateDir;
+  const stored: any = readProposal(control.structuredContent.proposalId);
+  assert.ok(stored, "control: the record is readable");
+  assert.equal(stored.pdfSha256, shaOfA, "control: pdfSha256 is the sha256 of A's bytes");
+  console.log(`${tag}: OBSERVED: control queued; record keys ${JSON.stringify(Object.keys(stored))}; pdfSha256 equals sha256(A): ${stored.pdfSha256 === shaOfA}`);
+  const filesAfterControl = proposalFiles();
+  assert.equal(filesAfterControl.length, 1);
+
+  // Replace the document at the same path with a different real PDF.
+  copyFileSync(path.join(FIXTURES, "covered-text.pdf"), docA); // B
+  assert.notDeepEqual(readFileSync(docA), readFileSync(path.join(FIXTURES, "sample.pdf")), "apparatus: B replaced A");
+  console.log(`${tag}: OBSERVED: replaced A with B, then proposed A's coordinates ${JSON.stringify(coords)} with A's id`);
+
+  const viaTool: any = await propose({ regions: coords, analysisId });
+  assert.equal(viaTool.isError, true, "propose_redactions with A's id after the file became B is refused");
+  assert.ok(textOf(viaTool).includes(CHANGED), textOf(viaTool));
+  console.log(`${tag}: OBSERVED: propose_redactions refused: ${textOf(viaTool)}`);
+
+  const noId: any = await propose({ regions: coords });
+  assert.equal(noId.isError, true, "propose_redactions with no analysisId is refused");
+  assert.ok(textOf(noId).includes(NEEDS_SCAN), textOf(noId));
+  console.log(`${tag}: OBSERVED: propose_redactions without an id refused: ${textOf(noId)}`);
+
+  assert.throws(
+    () =>
+      enqueueProposal({
+        client: { name: "probe", version: "0" },
+        tool: "redact_pdf",
+        pdfPath: docA,
+        outputPath: path.join(root, "out.pdf"),
+        regions: coords,
+        analysisId,
+      }),
+    (e: Error) => {
+      console.log(`${tag}: OBSERVED: enqueueProposal refused: ${e.message}`);
+      return e.message === CHANGED;
+    },
+  );
+  assert.deepEqual(proposalFiles(), filesAfterControl, "no proposal file was written by any refused attempt");
 });
